@@ -1,2 +1,2 @@
 # Calgy
-Energy spend calculator
+Energy spend tracker
