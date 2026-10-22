@@ -1,0 +1,2 @@
+# Calgy
+Energy spend calculator
