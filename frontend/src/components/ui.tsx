@@ -155,3 +155,40 @@ export function useEscape(active: boolean, onEscape: () => void) {
     return () => window.removeEventListener("keydown", h);
   }, [active, onEscape]);
 }
+
+/** Pill-style tab row; equal-width options. */
+export function Segmented<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { id: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      className="grid gap-1 rounded-2xl bg-track-2 p-1"
+      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+    >
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="tab"
+          aria-selected={value === o.id}
+          onClick={() => onChange(o.id)}
+          className={`h-11 rounded-xl text-[15px] font-semibold ${
+            value === o.id ? "bg-card text-ink shadow-sm" : "text-muted"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}

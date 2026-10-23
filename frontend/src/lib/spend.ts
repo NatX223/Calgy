@@ -13,21 +13,35 @@ export type Entry = {
   created_at: string; // ISO
 };
 
+/** How the home is powered: generator only, prepaid grid only, or both. */
+export type PowerSource = "gen" | "nepa" | "hybrid";
+
 export type Settings = {
   onboarded: boolean;
+  source: PowerSource;
   fuelWeekly: number;
   tokenMonthly: number;
   gridHours: number;
+  dailyKwh: number;
+  unitsLeft: number;
+  unitsAsOf: string | null; // YYYY-MM-DD the units-left reading was taken
   lastExport: string | null;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
+  source: "nepa",
   fuelWeekly: 0,
   tokenMonthly: 0,
   gridHours: 8,
+  dailyKwh: 0,
+  unitsLeft: 0,
+  unitsAsOf: null,
   lastExport: null,
 };
+
+/** Fixed id for the top-up captured during onboarding, so redoing it replaces rather than duplicates. */
+export const OB_TOPUP_ID = "ob-topup";
 
 export const unitPrice = (amount: number, qty: number | null) =>
   qty ? Math.round((amount / qty) * 100) / 100 : null;

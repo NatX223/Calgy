@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { daysIn, DOW, fmtQ, MONTHS, naira, nice, parseIso, short, trim, ymKey } from "@/lib/format";
+import { monthBuckets } from "@/lib/insights";
 import { byNewest, type Entry, type EntryType, type Settings } from "@/lib/spend";
 import { Eyebrow, Logo, Marker, SplitBar } from "../ui";
 
@@ -13,6 +14,7 @@ type Props = {
   onAdd: (t: EntryType) => void;
   onEdit: (e: Entry) => void;
   onSettings: () => void;
+  onInsights?: () => void;
   onLoadSample: () => void;
   /** Compare current month to the same days of last month, or to all of it. */
   compareBasis?: "same-period" | "full-month";
@@ -36,6 +38,7 @@ export function Dashboard({
   onAdd,
   onEdit,
   onSettings,
+  onInsights,
   onLoadSample,
   compareBasis = "same-period",
   showPace = true,
@@ -186,6 +189,8 @@ export function Dashboard({
           </div>
         )}
 
+        {onInsights && entries.length > 0 && <InsightsTeaser entries={entries} onClick={onInsights} />}
+
         <div className="mt-8 flex items-baseline justify-between">
           <h2 className="text-[19px] font-bold tracking-[-0.01em]">Entries</h2>
           <span className="font-mono text-xs text-muted">{mE.length ? `${mE.length} this month` : ""}</span>
@@ -255,6 +260,35 @@ export function Dashboard({
         </div>
       </div>
     </>
+  );
+}
+
+/** Six-month spend sparkline that opens the Insights view. */
+function InsightsTeaser({ entries, onClick }: { entries: Entry[]; onClick: () => void }) {
+  const months = monthBuckets(entries);
+  const totals = months.map((b) => b.fuel + b.token);
+  const max = Math.max(...totals) || 1;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-[22px] flex min-h-16 w-full items-center gap-4 rounded-[14px] bg-card px-4 py-3 text-left hover:bg-track-2"
+    >
+      <span className="flex h-9 items-end gap-[3px]" aria-hidden="true">
+        {totals.map((t, i) => (
+          <span
+            key={months[i].key}
+            className={`w-2 rounded-t-[2px] ${i === totals.length - 1 ? "bg-light" : "bg-ink-muted"}`}
+            style={{ height: Math.max(3, (t / max) * 36) }}
+          />
+        ))}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-[15px] font-semibold">Insights</span>
+        <span className="font-mono text-xs text-muted">Spend & usage per day, week, month</span>
+      </span>
+      <span className="text-sm font-bold whitespace-nowrap text-light">See →</span>
+    </button>
   );
 }
 

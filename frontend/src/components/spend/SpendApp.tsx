@@ -4,14 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { loadSolar, loadSpend, saveSolar, saveSpend } from "@/lib/db";
 import { commas, digits, naira, num, todayIso, trim, uid } from "@/lib/format";
 import { normaliseSolar } from "@/lib/solar";
-import { cleanImported, DEFAULT_SETTINGS, makeSample, unitPrice, type Entry, type EntryType, type Settings } from "@/lib/spend";
+import {
+  cleanImported, DEFAULT_SETTINGS, makeSample, OB_TOPUP_ID, unitPrice, type Entry, type EntryType, type Settings,
+} from "@/lib/spend";
 import { Toast, useEscape, useToast } from "../ui";
 import { Dashboard } from "./Dashboard";
+import { Insights } from "./Insights";
 import { LogSheet, type SheetState } from "./LogSheet";
-import { Onboarding, Reveal, type ObState } from "./Onboarding";
+import { obMonthly, Onboarding, Reveal, usesGrid, type ObState } from "./Onboarding";
 import { SettingsView } from "./SettingsView";
 
-type View = "onboard" | "reveal" | "home" | "settings";
+type View = "onboard" | "reveal" | "home" | "insights" | "settings";
 type Data = { entries: Entry[]; settings: Settings };
 
 const DEMO_SETTINGS: Settings = { ...DEFAULT_SETTINGS, onboarded: true, fuelWeekly: 25000, tokenMonthly: 40000 };
@@ -37,11 +40,19 @@ export function SpendApp({ demo = false }: { demo?: boolean }) {
   return <SpendView initial={data} demo={demo} />;
 }
 
-const obFrom = (s: Settings): ObState => ({
-  fuel: s.fuelWeekly ? commas(s.fuelWeekly) : "",
-  token: s.tokenMonthly ? commas(s.tokenMonthly) : "",
-  hours: s.gridHours ?? 8,
-});
+const obFrom = (s: Settings, entries: Entry[]): ObState => {
+  const topup = entries.find((e) => e.id === OB_TOPUP_ID);
+  return {
+    source: s.source ?? "nepa",
+    fuel: s.fuelWeekly ? commas(s.fuelWeekly) : "",
+    dailyKwh: s.dailyKwh ? String(s.dailyKwh) : "",
+    unitsLeft: s.unitsLeft ? String(s.unitsLeft) : "",
+    topupDate: topup?.date ?? todayIso(),
+    topupPrice: topup ? commas(topup.amount_naira) : "",
+    topupUnits: topup?.quantity != null ? String(topup.quantity) : "",
+    hours: s.gridHours ?? 8,
+  };
+};
 
 const offsetFor = (dateStr: string) => {
   const [y, m] = dateStr.split("-").map(Number);
@@ -54,7 +65,7 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
   const [settings, setSettings] = useState(initial.settings);
   const [view, setView] = useState<View>(initial.settings.onboarded ? "home" : "onboard");
   const [offset, setOffset] = useState(0);
-  const [ob, setOb] = useState<ObState>(() => obFrom(initial.settings));
+  const [ob, setOb] = useState<ObState>(() => obFrom(initial.settings, initial.entries));
   const [sheet, setSheetState] = useState<SheetState>({
     shown: false, mode: "new", id: null, type: "fuel", amount: "", qty: "", date: todayIso(), note: "",
   });
@@ -163,11 +174,34 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
     }
   };
 
-  const obF = num(digits(ob.fuel));
-  const obT = num(digits(ob.token));
-  const obMonthly = (obF * 52) / 12 + obT;
-  const saveOb = (extra: Partial<Settings> = {}) =>
-    setSettings((s) => ({ ...s, fuelWeekly: obF, tokenMonthly: obT, gridHours: ob.hours, ...extra }));
+  const obEstimate = obMonthly(ob).monthly;
+  const saveOb = (extra: Partial<Settings> = {}) => {
+    const grid = usesGrid(ob.source);
+    setSettings((s) => ({
+      ...s,
+      source: ob.source,
+      fuelWeekly: num(digits(ob.fuel)),
+      tokenMonthly: Math.round(obMonthly(ob).tokenM),
+      gridHours: ob.hours,
+      dailyKwh: grid ? num(ob.dailyKwh) : 0,
+      unitsLeft: grid ? num(ob.unitsLeft) : 0,
+      unitsAsOf: grid && num(ob.unitsLeft) ? todayIso() : null,
+      ...extra,
+    }));
+    // The last top-up doubles as the first token log; a fixed id keeps redoing onboarding from duplicating it.
+    const amt = num(digits(ob.topupPrice));
+    const q = num(ob.topupUnits) || null;
+    setEntries((es) => {
+      const rest = es.filter((e) => e.id !== OB_TOPUP_ID);
+      if (!grid || !amt) return rest;
+      const old = es.find((e) => e.id === OB_TOPUP_ID);
+      const rec: Entry = {
+        id: OB_TOPUP_ID, type: "token", amount_naira: amt, quantity: q, unit_price: unitPrice(amt, q),
+        date: ob.topupDate || todayIso(), note: null, created_at: old?.created_at ?? new Date().toISOString(),
+      };
+      return [rec, ...rest];
+    });
+  };
 
   return (
     <div className="min-h-screen bg-paper font-sans text-ink">
@@ -181,7 +215,7 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
               setView("home");
             }}
             onSeeEstimate={() => {
-              if (obMonthly) {
+              if (obEstimate) {
                 saveOb();
                 setView("reveal");
               } else {
@@ -211,19 +245,21 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
             onAdd={(t) => openSheet(t)}
             onEdit={(e) => openSheet(e.type, e)}
             onSettings={() => setView("settings")}
+            onInsights={() => setView("insights")}
             onLoadSample={() => {
               loadSample(false);
               showToast("Sample data loaded — erase it in Settings");
             }}
           />
         )}
+        {view === "insights" && <Insights entries={entries} settings={settings} onBack={() => setView("home")} />}
         {view === "settings" && (
           <SettingsView
             entryCount={entries.length}
             settings={settings}
             onBack={() => setView("home")}
             onRedo={() => {
-              setOb(obFrom(settings));
+              setOb(obFrom(settings, entries));
               setView("onboard");
             }}
             onHours={(d) => setSettings((s) => ({ ...s, gridHours: Math.min(24, Math.max(0, s.gridHours + d)) }))}
@@ -236,7 +272,7 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
             onErase={() => {
               setEntries([]);
               setSettings({ ...DEFAULT_SETTINGS });
-              setOb({ fuel: "", token: "", hours: 8 });
+              setOb(obFrom(DEFAULT_SETTINGS, []));
               setOffset(0);
               setView("onboard");
               showToast("All data erased");
