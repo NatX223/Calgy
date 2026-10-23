@@ -1,26 +1,76 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-paper: #f2eee4;
+  --color-card: #fbf9f4;
+  --color-ink: #191712;
+  --color-muted: #6b655a;
+  --color-body-2: #4a453c;
+  --color-line: #ddd5c5;
+  --color-line-strong: #cfc6b4;
+  --color-track: #e6e0d3;
+  --color-track-2: #ece7db;
+  --color-fuel: #e8a33d;
+  --color-fuel-ink: #8a520e;
+  --color-fuel-soft: #f6e2bf;
+  --color-light: #1f7a4d;
+  --color-light-bright: #2e9a64;
+  --color-light-soft: #e3f0e8;
+  --color-light-chip: #bfe0cc;
+  --color-red: #b4442a;
+  --color-red-soft: #f2c9bc;
+  --color-ink-muted: #c9c1b1;
+  --color-ink-line: #3a362e;
+  --color-ink-field: #24211b;
+  --color-ink-pill: #2a2720;
+  --color-placeholder: #a39b8c;
+
+  --font-sans: var(--font-bricolage), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  --breakpoint-wide: 900px;
+
+  --ease-sheet: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html,
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    font-family: var(--font-sans);
+  }
+  input,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+  button {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:disabled {
+    cursor: default;
+  }
+  input::placeholder {
+    color: var(--color-placeholder);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility pb-safe-bar {
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+}
+
+@utility bar-fade {
+  background: linear-gradient(to top, var(--color-paper) 65%, rgb(242 238 228 / 0));
 }
