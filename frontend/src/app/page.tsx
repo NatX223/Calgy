@@ -1,19 +1,17 @@
 import Link from "next/link";
-import { Estimator } from "@/components/landing/Estimator";
 import { SpendApp } from "@/components/spend/SpendApp";
 import { Logo } from "@/components/ui";
 
 const STEPS = [
-  { n: "01", rule: "border-ink", title: "Start with a guess", body: "Weekly fuel, monthly tokens, hours of NEPA light. Under a minute — or skip it." },
-  { n: "02", rule: "border-fuel", title: "Log in two taps", body: "Hit + Fuel or + Token, punch in the naira. Litres and units are optional." },
-  { n: "03", rule: "border-light", title: "See the real total", body: "This month's spend, the fuel vs grid split, and whether you're up or down on last month." },
+  { n: "01", rule: "border-ink", title: "Track", body: "Record what you spend energy both Gen and NEPA." },
+  { n: "02", rule: "border-fuel", title: "Review", body: "View your spending history and insights." },
+  { n: "03", rule: "border-light", title: "Estimate", body: "Simulate usage and spending." },
 ];
 
 const DETAILS = [
-  { fig: "₦209.4/kWh", color: "text-light", title: "Your real tariff, not the band on paper", body: "Add the units from your token receipt and Calgy works out what you actually pay per kWh." },
-  { fig: "₦1,020/L", color: "text-fuel-ink", title: "Your pump price, every top-up", body: "Log litres and see your average price per litre — station or roadside." },
-  { fig: "₦112k–₦137k", color: "", title: "Honest ranges, not fake precision", body: "Mid-month, Calgy shows where you're headed as a range, from what you've actually spent." },
-  { fig: "0 accounts", color: "", title: "Your data stays on your phone", body: "No signup, no server. Export a backup file whenever you like and import it on a new phone." },
+  { fig: "₦2xx.x/kWh", color: "text-light", title: "Your real tariff, not the band on paper", body: "Add the units from your token receipt and Calgy works out what you actually pay per kWh." },
+  { fig: "₦1,xxx/L", color: "text-fuel-ink", title: "Your pump price, every top-up", body: "Log litres and see your average price per litre — station or roadside." },
+  // { fig: "₦112k–₦137k", color: "", title: "Honest ranges, not fake precision", body: "Mid-month, Calgy shows where you're headed as a range, from what you've actually spent." },
 ];
 
 export default function Landing() {
@@ -37,59 +35,45 @@ export default function Landing() {
         </div>
       </nav>
 
-      <section className="mx-auto grid max-w-[1160px] grid-cols-[repeat(auto-fit,minmax(min(100%,440px),1fr))] items-center gap-14 px-6 pt-10 pb-24">
+      <section className="mx-auto grid max-w-[1160px] grid-cols-[repeat(auto-fit,minmax(min(100%,440px),1fr))] items-center gap-10 px-6 pt-4 pb-16">
         <div className="flex flex-col">
           <span className="font-mono text-[13px] tracking-[0.08em] text-muted uppercase">
-            Home energy tracker · for Naija homes
+            Your home energy tracker
           </span>
-          <h1 className="mt-[18px] mb-[22px] text-[clamp(46px,6.6vw,86px)] leading-[0.96] font-extrabold tracking-[-0.045em] text-balance">
-            Your fuel and token money, finally added up.
+          <h1 className="mt-3.5 mb-4 text-[clamp(40px,5vw,64px)] leading-[0.96] font-extrabold tracking-[-0.045em] text-balance">
+            Your energy costs, finally adds up.
           </h1>
-          <p className="max-w-[520px] text-[clamp(17px,1.6vw,20px)] leading-normal text-pretty text-body-2">
-            Calgy logs every jerrycan of fuel and every meter token in two taps, then shows what your home really spends
-            on energy each month — fuel vs grid, up or down on last month.
+          <p className="max-w-[480px] text-[clamp(16px,1.3vw,18px)] leading-normal text-pretty text-body-2">
+            Calgy helps you log every litre of fuel and every meter token in two taps. See what your home really spends
+            on energy each month, get estimates and simulate your usage and spending.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3.5">
+          <div className="mt-6 flex flex-wrap items-center gap-3.5">
             <Link
               href="/app"
-              className="inline-flex h-[60px] items-center rounded-2xl bg-ink px-[26px] text-[17px] font-bold whitespace-nowrap text-card no-underline"
+              className="inline-flex h-[52px] items-center rounded-2xl bg-ink px-[22px] text-base font-bold whitespace-nowrap text-card no-underline"
             >
-              Start tracking — free
+              Start tracking
             </Link>
-            <a
-              href="#estimate"
-              className="inline-flex h-[60px] items-center rounded-2xl border-[1.5px] border-line-strong px-[22px] text-[17px] font-semibold whitespace-nowrap no-underline"
-            >
-              Ballpark my spend ↓
-            </a>
-          </div>
-          <div className="mt-[22px] flex flex-wrap gap-x-[18px] gap-y-2 font-mono text-[13px] text-muted">
-            <span className="whitespace-nowrap">No signup</span>
-            <span aria-hidden="true">·</span>
-            <span className="whitespace-nowrap">Works in your phone browser</span>
-            <span aria-hidden="true">·</span>
-            <span className="whitespace-nowrap">Data stays on your device</span>
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-[740px] w-[360px] max-w-full rounded-[48px] bg-ink p-2.5 shadow-[0_30px_60px_-20px_rgba(25,23,18,0.35)]">
+        <div className="flex flex-col items-center gap-3">
+          {/* zoom shrinks the phone while keeping the demo laid out at its native 360px width */}
+          <div style={{ zoom: 0.72 }} className="h-[740px] w-[360px] max-w-full rounded-[48px] bg-ink p-2.5 shadow-[0_30px_60px_-20px_rgba(25,23,18,0.35)]">
             {/* translateZ makes this the containing block for the demo's fixed bars, sheet and toast */}
             <div className="relative h-full w-full overflow-hidden rounded-[38px] bg-paper" style={{ transform: "translateZ(0)" }}>
-              <div className="h-full w-full overflow-x-hidden overflow-y-auto" aria-label="Live demo of the Calgy app">
+              <div className="no-scrollbar h-full w-full overflow-x-hidden overflow-y-auto" aria-label="Live demo of the Calgy app">
                 <SpendApp demo />
               </div>
             </div>
           </div>
-          <span className="font-mono text-xs text-muted">Live demo with sample data — tap + Fuel. Nothing is saved.</span>
+          <span className="font-mono text-xs text-muted">Demo data</span>
         </div>
       </section>
 
-      <Estimator />
-
       <section id="how" className="mx-auto max-w-[1160px] scroll-mt-4 px-6 pt-[104px] pb-[72px]">
         <h2 className="mb-12 max-w-[720px] text-[clamp(34px,4.2vw,54px)] leading-none font-extrabold tracking-[-0.04em] text-balance">
-          Built for the moment you&apos;re at the pump.
+          Track . Review . Estimate
         </h2>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-8">
           {STEPS.map((s) => (
