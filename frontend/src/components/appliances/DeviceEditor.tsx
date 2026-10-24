@@ -8,7 +8,7 @@ import {
 import { calibrationNotes, sourcesOf, type Side } from "@/lib/calibration";
 import { explain, LIMITS, resolveDraw, unusualLabel } from "@/lib/energy";
 import { dec, fU, num, trimN } from "@/lib/format";
-import { canPrice, homeSplits, nairaOf, splitsOf, supplyNote, toTrio, unitsOf, type Calib } from "@/lib/home-calibration";
+import { homeSplits, priceHome, splitsOf, supplyNote, toTrio, unitsOf, type Calib, type SimFuel } from "@/lib/home-calibration";
 import { Chip, StepButton } from "../ui";
 import { CustomSetup, field, LabelFields, Seg, segClass } from "./LabelFields";
 import { moneyFor } from "./MyHome";
@@ -20,6 +20,7 @@ export function DeviceEditor({
   draft: d,
   setDraft,
   calib,
+  fuel,
   ctxTotal,
   home,
   onBack,
@@ -31,6 +32,7 @@ export function DeviceEditor({
   setDraft: (p: Partial<Draft>) => void;
   T: Tariff | null;
   calib: Calib;
+  fuel: SimFuel;
   /** Typical kWh/day of the context this device joins (My Home or the simulation). */
   ctxTotal: number;
   home: Device[];
@@ -45,7 +47,8 @@ export function DeviceEditor({
   const isEdit = d.mode === "edit";
   const split = splitsOf(calib, [{ device: dev, baseId: isEdit ? d.id : null }])[0];
   const dt = toTrio(unitsOf(split));
-  const money = canPrice(calib) ? nairaOf(calib, split) : null;
+  // This device's share: light at the tariff plus the fuel its load adds (the gen's idle burn isn't any one device's).
+  const money = priceHome(calib, fuel, [split]).rows[0].naira;
   const onLabel = !isEdit && d.step === "label";
   const prev = isEdit ? home.find((x) => x.id === d.id) : undefined;
   const prevTyp = prev ? unitsOf(homeSplits(calib, [prev])[0]).typical : 0;

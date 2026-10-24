@@ -66,6 +66,9 @@ export const IDLE_FRACTION: Record<"petrol" | "diesel", Triple> = {
   diesel: [0.25, 0.3, 0.4],
 };
 
+/** Simulator Hybrid tab: gen hours a day to assume before any fuel is logged with hours. */
+export const ASSUMED_HYBRID_GEN_HOURS = 4;
+
 /** Gen confidence by purchases with hours: rough below `good`, solid from `solid`. */
 export const GEN_CONFIDENCE = { good: 3, solid: 6 };
 /** Gen coverage band treated as matched. */

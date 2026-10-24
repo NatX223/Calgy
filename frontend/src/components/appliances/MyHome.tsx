@@ -3,7 +3,7 @@
 import { fromLabel, usageSummary, type Device, type Tariff } from "@/lib/appliances";
 import { sumSplits } from "@/lib/calibration";
 import { fU, naira, rN } from "@/lib/format";
-import { canPrice, homeSplits, nairaOf, supplyNote, toTrio, unitsOf, type Calib } from "@/lib/home-calibration";
+import { homeSplits, priceHome, supplyNote, toTrio, unitsOf, type Calib, type SimFuel } from "@/lib/home-calibration";
 import type { Confidence } from "@/lib/meter";
 import type { Settings } from "@/lib/spend";
 import Link from "next/link";
@@ -46,6 +46,7 @@ export function MyHome({
   devices,
   T,
   calib,
+  fuel,
   hoursSource,
   keptAt,
   onSetHours,
@@ -62,6 +63,7 @@ export function MyHome({
   devices: Device[];
   T: Tariff | null;
   calib: Calib;
+  fuel: SimFuel;
   hoursSource: Settings["gridHoursSource"];
   keptAt: Confidence | null;
   onSetHours: (h: number) => void;
@@ -80,7 +82,10 @@ export function MyHome({
   const split = new Map(devices.map((d, i) => [d.id, splits[i]]));
   const tot = sumSplits(splits);
   const units = toTrio(unitsOf(tot));
-  const money = canPrice(calib) ? nairaOf(calib, tot) : null;
+  const priced = priceHome(calib, fuel, splits);
+  const money = priced.totals.naira;
+  const rowNaira = new Map(devices.map((d, i) => [d.id, priced.rows[i].naira]));
+  const idleNaira = money && priced.totals.idleLitres > 0 ? priced.totals.idleLitres * (fuel.info.nairaPerLitre ?? 0) : 0;
   const qtyTotal = devices.reduce((a, d) => a + Math.max(1, d.quantity), 0);
   const groups = CATEGORIES.map((c) => ({ ...c, items: devices.filter((d) => d.category === c.id) })).filter(
     (g) => g.items.length,
@@ -125,6 +130,11 @@ export function MyHome({
                       {fU(units.lo * 30)} – {fU(units.hi * 30)} units (kWh)
                       {hh === "hybrid" ? ` · ${fU(tot.grid.typical * 30)} light, ${fU(tot.gen.typical * 30)} gen` : ""}
                     </span>
+                    {idleNaira > 0 && (
+                      <span className="font-mono text-xs text-ink-muted">
+                        Includes ~{moneyFor(idleNaira, 30)} just to keep the gen running
+                      </span>
+                    )}
                   </div>
                 </>
               ) : (
@@ -187,7 +197,7 @@ export function MyHome({
                   {grp.items.map((d) => {
                     const w = supplyNote(d, calib);
                     const s = split.get(d.id)!;
-                    const n = money ? nairaOf(calib, s) : null;
+                    const n = money ? rowNaira.get(d.id) : null;
                     return (
                       <button
                         key={d.id}

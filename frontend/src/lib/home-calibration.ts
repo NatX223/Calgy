@@ -1,11 +1,14 @@
 // Glue between saved app state and the calibration engine, plus the units/₦ view the screens share.
 import { supplyWarning } from "./appliances";
 import {
-  calibrate, householdOf, simulateWithCalibration, sourcesOf, type CalibrationResult, type Household, type SimInput, type Split,
+  calibrate, computeGenActuals, householdOf, simulateWithCalibration, sourcesOf, type GenSpec, type CalibrationResult, type Household, type SimInput, type Split,
 } from "./calibration";
-import { addRange, scaleRange, ZERO, type Device, type Range } from "./energy";
-import { genSummary, type FuelPurchase, type GeneratorProfile } from "./generator";
+import { addRange, type Device, type Range } from "./energy";
+import {
+  genSummary, NOT_SURE_TYPE, resolveKw, sizeLabel, type FuelPurchase, type GeneratorProfile,
+} from "./generator";
 import { tokensFromEntries, type MeterReading, type MeterState } from "./meter";
+import { costMode } from "./sim-modes";
 import { gridHoursSetting, type Entry, type Settings } from "./spend";
 
 export type HomeState = {
@@ -79,16 +82,17 @@ export const homeSplits = (c: Calib, devices: Device[]) => splitsOf(c, devices.m
 
 export const unitsOf = (s: Split): Range => addRange(s.grid, s.gen);
 
-/** ₦/day from a split, or null when a side that's in use has no price yet. */
-export function nairaOf(c: Pick<Calib, "tariff" | "genRate">, s: Split): Range | null {
-  if (s.grid.typical > 0 && c.tariff == null) return null;
-  if (s.gen.typical > 0 && c.genRate == null) return null;
-  return addRange(c.tariff ? scaleRange(s.grid, c.tariff) : ZERO, c.genRate ? scaleRange(s.gen, c.genRate) : ZERO);
-}
+export type SimFuel = ReturnType<typeof simFuel>;
 
-/** Can this home be shown in ₦ at all? */
-export const canPrice = (c: Pick<Calib, "household" | "tariff" | "genRate">) =>
-  (c.household === "gen" || c.tariff != null) && (c.household === "grid" || c.genRate != null);
+/**
+ * ₦ and fuel a day for devices as My Home runs them: light at the tariff, the gen side through the fuel model.
+ * The gen's idle burn is counted once in the totals, not shared out to devices. Same maths as the simulator's gen tabs.
+ */
+export const priceHome = (c: Calib, fuel: SimFuel, splits: Split[]) =>
+  costMode(splits, splits.map(() => true), c.H ?? 0, c.household === "grid" ? null : fuel.spec, {
+    tariff: c.tariff,
+    nairaPerLitre: fuel.info.nairaPerLitre,
+  });
 
 export const toTrio = (r: Range) => ({ lo: r.low, typ: r.typical, hi: r.high });
 
@@ -104,4 +108,22 @@ export function supplyNote(d: Device, c: Pick<Calib, "household" | "G" | "H">): 
   if (!src.includes("grid"))
     return gen && h > gen ? `Your gen runs about ${h1(gen)}h a day; this is set to ${h1(h)}h.` : "";
   return gen && h > c.G + gen ? `You get about ${h1(c.G)}h of light and ${h1(gen)}h of gen a day; this is set to ${h1(h)}h.` : "";
+}
+
+/** The gen the simulator's gen tabs use: the home's, or a typical small petrol one, priced from fuel logs. */
+export function simFuel(generator: GeneratorProfile | null, purchases: FuelPurchase[], entries: Entry[]) {
+  const spec: GenSpec = generator ?? { ...resolveKw({ sizeSource: "not_sure", typeId: NOT_SURE_TYPE }), fuelType: "petrol" };
+  const fromPurchases = computeGenActuals(purchases).nairaPerLitre;
+  const logged = entries.filter((e) => e.type === "fuel" && (e.quantity ?? 0) > 0);
+  const litres = logged.reduce((t, e) => t + e.quantity!, 0);
+  const nairaPerLitre = fromPurchases ?? (litres ? logged.reduce((t, e) => t + e.amount_naira, 0) / litres : null);
+  return {
+    spec,
+    info: {
+      label: generator ? `${sizeLabel(generator)} ${generator.fuelType}` : "typical small petrol · assumed",
+      assumed: !generator,
+      nairaPerLitre,
+      priceSource: nairaPerLitre != null ? "from your fuel logs" : null,
+    },
+  };
 }

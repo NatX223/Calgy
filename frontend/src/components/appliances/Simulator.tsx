@@ -4,15 +4,16 @@ import {
   CAT_LABEL, CAT_ORDER, chargesDown, chargesUp, isModified, toDevice, usageSummary,
   type Device, type SimRow, type Tariff,
 } from "@/lib/appliances";
-import { computeGenActuals, genReady, predictedLph, sumSplits } from "@/lib/calibration";
-import { DEFAULT_GRID_HOURS } from "@/lib/calibration-constants";
+import { genReady, predictedLph, sumSplits, type GenSpec, type Household } from "@/lib/calibration";
+import { ASSUMED_HYBRID_GEN_HOURS, DEFAULT_GRID_HOURS } from "@/lib/calibration-constants";
 import { LIMITS } from "@/lib/energy";
 import { commas, dec, digits, fU, naira, num, rN, shortN, trimN } from "@/lib/format";
-import type { FuelPurchase, GeneratorProfile } from "@/lib/generator";
 import { splitsOf, supplyNote, toTrio, type Calib } from "@/lib/home-calibration";
+import { costMode, type SimMode } from "@/lib/sim-modes";
 import { Chip, Eyebrow, StepButton } from "../ui";
 import { TierPicker } from "./DeviceEditor";
 import { costFor, QtyBadge } from "./MyHome";
+import { FuelLife, GenResults, HoursWhatIf, type FuelInfo } from "./SimGenPanels";
 
 export type SimUi = {
   period: "day" | "week" | "month" | "custom";
@@ -20,8 +21,19 @@ export type SimUi = {
   sort: "cost" | "category";
   expanded: string | null;
   tokenAmt: string;
-  soon: "hybrid" | "gen" | null;
+  /** Tab; null = the one matching the household. */
+  mode: SimMode | null;
+  /** What-if light / gen hours; null = the household's. */
+  simG: number | null;
+  simH: number | null;
+  fuelAmt: string;
 };
+
+const TABS: [SimMode, string][] = [
+  ["prepaid", "Prepaid meter"],
+  ["hybrid", "Hybrid"],
+  ["gen", "Generator only"],
+];
 
 const PERIODS = [
   ["day", "Day"],
@@ -37,8 +49,7 @@ export function Simulator({
   rows,
   T,
   calib,
-  generator,
-  purchases,
+  fuel,
   ui,
   setUi,
   simEdit,
@@ -55,8 +66,8 @@ export function Simulator({
   rows: SimRow[];
   T: Tariff | null;
   calib: Calib;
-  generator: GeneratorProfile | null;
-  purchases: FuelPurchase[];
+  /** The home's gen (or a typical one when none is set up) and its fuel price. */
+  fuel: { spec: GenSpec; info: FuelInfo };
   ui: SimUi;
   setUi: (p: Partial<SimUi>) => void;
   simEdit: (key: string, fn: (r: SimRow) => Partial<SimRow>) => void;
@@ -75,28 +86,58 @@ export function Simulator({
     ui.period === "day" ? 1 : ui.period === "week" ? 7 : ui.period === "month" ? 30 : Math.max(1, Math.round(num(ui.customDays)) || 1);
   const perLabel = ui.period === "custom" ? `${days} day${days > 1 ? "s" : ""}` : ui.period;
 
-  // This tab is the prepaid meter: grid-side units. A gen-only home gets a plain "what if I were on prepaid" view.
-  const pc: Calib = calib.household === "gen" ? { ...calib, result: null, household: "grid", G: DEFAULT_GRID_HOURS } : calib;
-  const g = Math.round(pc.G * 2) / 2;
-  const homeS = splitsOf(pc, home.map((d) => ({ device: d, baseId: d.id })));
-  const rowS = splitsOf(pc, rows.map((r) => ({ device: toDevice(r), baseId: r.baseId })));
+  const hh = calib.household;
+  const mode: SimMode = ui.mode ?? (hh === "grid" ? "prepaid" : hh);
+  // Baseline hours (My Home's); the steppers change them as what-ifs, never the saved ones.
+  const baseG = hh === "gen" ? DEFAULT_GRID_HOURS : calib.G;
+  const hAssumed = calib.result?.gen?.genHoursPerDay == null;
+  const baseH = !hAssumed && calib.H ? calib.H : mode === "gen" ? DEFAULT_GRID_HOURS : ASSUMED_HYBRID_GEN_HOURS;
+  const G = ui.simG ?? baseG;
+  const H = ui.simH ?? baseH;
+  const homeIn = home.map((d) => ({ device: d, baseId: d.id }));
+  const rowIn = rows.map((r) => ({ device: toDevice(r), baseId: r.baseId }));
+  const onRows = rows.filter((r) => r.on);
+
+  // Prepaid tab: grid-side units. A gen-only home gets a plain "what if I were on prepaid" view.
+  const pc: Calib = hh === "gen" ? { ...calib, result: null, household: "grid", G: DEFAULT_GRID_HOURS } : calib;
+  const g = Math.round(G * 2) / 2;
+  const homeS = splitsOf(pc, homeIn);
+  const rowS = splitsOf(pc, rowIn, { G, H: pc.H });
   const rowUnits = new Map(rows.map((r, i) => [r.key, toTrio(rowS[i].grid)]));
   const trio = (r: SimRow) => rowUnits.get(r.key)!;
   const homeTot = toTrio(sumSplits(homeS).grid);
-  const onRows = rows.filter((r) => r.on);
   const onS = rowS.filter((_, i) => rows[i].on);
   const simTot = toTrio(sumSplits(onS).grid);
 
-  // Gen-side what-if (hybrid): fuel from the burn model at the new device load.
-  const H = calib.H;
-  const nairaPerLitre = generator ? computeGenActuals(purchases).nairaPerLitre : null;
+  // Gen-side what-if on the prepaid tab of a hybrid home: fuel from the burn model at the new device load.
+  const ppl = fuel.info.nairaPerLitre;
   const genFuelDelta =
-    calib.household === "hybrid" && calib.enabled && genReady(calib.result) && generator && H && nairaPerLitre
-      ? (predictedLph(generator, sumSplits(onS).gen.typical / H) - predictedLph(generator, sumSplits(homeS).gen.typical / H)) *
-        H *
-        nairaPerLitre *
+    hh === "hybrid" && calib.enabled && genReady(calib.result) && calib.H && ppl
+      ? (predictedLph(fuel.spec, sumSplits(onS).gen.typical / calib.H) - predictedLph(fuel.spec, sumSplits(homeS).gen.typical / calib.H)) *
+        calib.H *
+        ppl *
         30
       : 0;
+
+  // Hybrid and Generator-only tabs: light at the tariff, gen side in fuel.
+  const modeHh: Household = mode === "gen" ? "gen" : "hybrid";
+  const prices = { tariff: T?.value ?? null, nairaPerLitre: ppl };
+  const genHome = costMode(splitsOf(calib, homeIn, { G: baseG, H: baseH }, modeHh), home.map(() => true), baseH, fuel.spec, prices);
+  const genSim = costMode(splitsOf(calib, rowIn, { G, H }, modeHh), rows.map((r) => r.on), H, fuel.spec, prices);
+  const genRow = new Map(rows.map((r, i) => [r.key, genSim.rows[i]]));
+  const supply = { household: mode === "prepaid" ? pc.household : modeHh, G, H };
+  /** What a row is sorted and ranked by on this tab. */
+  const rowVal = (r: SimRow) => {
+    if (mode === "prepaid") return trio(r).typ;
+    const m = genRow.get(r.key)!;
+    return m.naira?.typical ?? (mode === "gen" ? m.litres.typical : m.units.typical);
+  };
+  const rowAmount = (r: SimRow) => {
+    if (mode === "prepaid") return T ? "~" + cost(trio(r).typ, days) : fU(trio(r).typ * days) + " u";
+    const m = genRow.get(r.key)!;
+    if (m.naira) return "~" + naira(rN(m.naira.typical * days, days));
+    return mode === "gen" ? `${fU(m.litres.typical * days)} L` : fU(m.units.typical * days) + " u";
+  };
   const dTyp = simTot.typ - homeTot.typ;
   const pct = homeTot.typ ? Math.round((dTyp / homeTot.typ) * 100) : 0;
   const sign = dTyp < 0 ? "−" : "+";
@@ -106,16 +147,14 @@ export function Simulator({
 
   const sorted = [...rows].sort((a, b) =>
     ui.sort === "cost"
-      ? Number(b.on) - Number(a.on) || trio(b).typ - trio(a).typ
+      ? Number(b.on) - Number(a.on) || rowVal(b) - rowVal(a)
       : CAT_ORDER[a.category] - CAT_ORDER[b.category] || a.name.localeCompare(b.name),
   );
 
-  const warnCount = onRows.filter((r) => supplyNote(r, pc)).length;
-  const top = onRows
-    .map((r) => ({ r, v: trio(r).typ }))
-    .filter((x) => x.v > 0)
-    .sort((a, b) => b.v - a.v)
-    .slice(0, 3);
+  const warnCount = onRows.filter((r) => supplyNote(r, supply)).length;
+  const ranked = onRows.map((r) => ({ r, v: rowVal(r) })).filter((x) => x.v > 0);
+  const rankedTotal = ranked.reduce((t, x) => t + x.v, 0);
+  const top = ranked.sort((a, b) => b.v - a.v).slice(0, 3);
 
   // Token life
   const tokA = num(digits(ui.tokenAmt));
@@ -139,38 +178,23 @@ export function Simulator({
           Switch things off, change hours, see the cost move. My Home stays untouched until you save.
         </p>
 
-        <div className="grid grid-cols-3 gap-1 rounded-[14px] bg-track p-1">
-          <button type="button" aria-pressed="true" className="min-h-12 rounded-[10px] bg-ink text-sm font-bold text-card">
-            Prepaid meter
-          </button>
-          {(
-            [
-              ["hybrid", "Hybrid"],
-              ["gen", "Generator only"],
-            ] as const
-          ).map(([k, label]) => (
+        <div role="tablist" aria-label="How the home is powered" className="grid grid-cols-3 gap-1 rounded-[14px] bg-track p-1">
+          {TABS.map(([k, label]) => (
             <button
               key={k}
               type="button"
-              aria-disabled="true"
-              onClick={() => setUi({ soon: k })}
-              className="flex min-h-12 flex-col items-center justify-center gap-px rounded-[10px] text-sm font-semibold text-muted"
+              role="tab"
+              aria-selected={mode === k}
+              onClick={() => setUi({ mode: k, simG: null, simH: null })}
+              className={`min-h-12 rounded-[10px] text-sm ${mode === k ? "bg-ink font-bold text-card" : "font-semibold text-ink"}`}
             >
               {label}
-              <span className="font-mono text-[10px] tracking-[0.06em] text-fuel-ink uppercase">Soon</span>
             </button>
           ))}
         </div>
-        {ui.soon && (
-          <div className="mt-2 flex items-center gap-2.5 rounded-xl bg-fuel-soft px-3.5 py-2.5 text-sm leading-[1.4]">
-            <span className="flex-1">
-              {ui.soon === "hybrid"
-                ? "Hybrid is coming soon: combine light hours and generator hours to see your real mix."
-                : "Generator only is coming soon: see what your devices cost to run on fuel."}
-            </span>
-            <button type="button" onClick={() => setUi({ soon: null })} aria-label="Dismiss" className="h-8 w-8 text-sm">
-              ✕
-            </button>
+        {mode !== "prepaid" && fuel.info.assumed && (
+          <div className="mt-2 rounded-xl bg-fuel-soft px-3.5 py-2.5 text-sm leading-[1.4]">
+            No gen set up yet, so this assumes a typical small petrol gen. Add yours in Spend for real numbers.
           </div>
         )}
 
@@ -202,6 +226,19 @@ export function Simulator({
           )}
         </div>
 
+        {rows.length > 0 && (
+          <HoursWhatIf
+            mode={mode}
+            G={G}
+            H={H}
+            hAssumed={hAssumed}
+            onG={(v) => setUi({ simG: v })}
+            onH={(v) => setUi({ simH: v })}
+            changed={ui.simG != null || ui.simH != null}
+            onReset={() => setUi({ simG: null, simH: null })}
+          />
+        )}
+
         {rows.length === 0 ? (
           <div className="mt-[22px] flex flex-col items-center gap-3 rounded-[22px] border-[1.5px] border-dashed border-line-strong px-[22px] py-8 text-center">
             <span className="text-xl font-extrabold">Nothing to simulate yet</span>
@@ -224,6 +261,30 @@ export function Simulator({
         ) : (
           <div className="mt-[18px] flex flex-col gap-4 wide:grid wide:grid-cols-[380px_minmax(0,1fr)] wide:items-start wide:gap-8">
             <div className="contents wide:sticky wide:top-4 wide:flex wide:flex-col wide:gap-4">
+              {mode !== "prepaid" ? (
+                <>
+                  <GenResults
+                    mode={mode}
+                    sim={genSim.totals}
+                    home={genHome.totals}
+                    days={days}
+                    perLabel={perLabel}
+                    anyMod={anyMod || ui.simG != null || ui.simH != null}
+                    fuel={fuel.info}
+                    tariffLabel={T ? `₦${fU(tv)}/kWh · ${T.source}` : null}
+                    onTariff={onTariff}
+                  />
+                  <FuelLife
+                    amount={ui.fuelAmt}
+                    setAmount={(v) => setUi({ fuelAmt: v })}
+                    simPerDay={genSim.totals.litres.typical}
+                    homePerDay={genHome.totals.litres.typical}
+                    anyMod={anyMod || ui.simG != null || ui.simH != null}
+                    nairaPerLitre={ppl}
+                  />
+                </>
+              ) : (
+                <>
               {/* Results */}
               <div className="sticky top-0 z-10 flex flex-col gap-3.5 rounded-[22px] bg-ink px-5 py-[18px] text-card shadow-[0_10px_24px_-12px_rgba(25,23,18,0.5)] wide:static">
                 <Eyebrow className="text-[11px] text-ink-muted">Estimated · per {perLabel}</Eyebrow>
@@ -327,12 +388,14 @@ export function Simulator({
                   </button>
                 )}
               </div>
+                </>
+              )}
 
               {top.length > 0 && (
                 <div className="flex flex-col gap-3 px-0.5 py-1">
                   <Eyebrow>Top consumers</Eyebrow>
                   {top.map((x, i) => {
-                    const p = Math.round((x.v / simTot.typ) * 100);
+                    const p = Math.round((x.v / rankedTotal) * 100);
                     return (
                       <div key={x.r.key} className="flex flex-col gap-1.5">
                         <div className="flex justify-between gap-2.5 text-sm">
@@ -358,9 +421,11 @@ export function Simulator({
             <div className="flex min-w-0 flex-col">
               {warnCount > 0 && (
                 <div className="mb-3.5 rounded-[14px] bg-fuel-soft px-3.5 py-3 text-sm leading-[1.4] font-medium">
-                  {pc.household === "hybrid"
+                  {supply.household === "hybrid"
                     ? `${warnCount} device${warnCount > 1 ? "s are" : " is"} set to run longer than your light and gen hours together.`
-                    : `${warnCount} device${warnCount > 1 ? "s are" : " is"} set to run longer than your ~${g}h of light a day. On prepaid alone, they can't.`}
+                    : supply.household === "gen"
+                      ? `${warnCount} device${warnCount > 1 ? "s are" : " is"} set to run longer than your ~${Math.round(H * 2) / 2}h of gen a day.`
+                      : `${warnCount} device${warnCount > 1 ? "s are" : " is"} set to run longer than your ~${g}h of light a day. On prepaid alone, they can't.`}
                 </div>
               )}
               <div className="flex items-center justify-between gap-3 border-b-[1.5px] border-ink pb-2">
@@ -395,9 +460,9 @@ export function Simulator({
                   key={r.key}
                   r={r}
                   home={home}
-                  warn={supplyNote(r, pc)}
+                  warn={supplyNote(r, supply)}
                   showCat={ui.sort === "category"}
-                  amount={T ? "~" + cost(trio(r).typ, days) : fU(trio(r).typ * days) + " u"}
+                  amount={rowAmount(r)}
                   expanded={ui.expanded === r.key}
                   onExpand={() => setUi({ expanded: ui.expanded === r.key ? null : r.key })}
                   edit={(fn) => simEdit(r.key, fn)}

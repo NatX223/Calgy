@@ -11,7 +11,7 @@ import { sumSplits } from "@/lib/calibration";
 import { loadGen, loadHome, loadMeter, loadSpend, patchSettings, saveHome, saveMeter } from "@/lib/db";
 import { fU } from "@/lib/format";
 import type { FuelPurchase, GeneratorProfile } from "@/lib/generator";
-import { calibContext, calibrateHome, homeSplits, inferredHoursPatch, splitsOf, unitsOf } from "@/lib/home-calibration";
+import { calibContext, calibrateHome, homeSplits, inferredHoursPatch, simFuel, splitsOf, unitsOf } from "@/lib/home-calibration";
 import type { MeterReading, MeterState } from "@/lib/meter";
 import type { Preset } from "@/lib/presets";
 import type { Entry, Settings } from "@/lib/spend";
@@ -75,7 +75,8 @@ function AppliancesView({ initial }: { initial: Data }) {
   const { entries, readings, generator, purchases } = initial;
   const [sim, setSim] = useState<SimRow[] | null>(null);
   const [simUi, setSimUiState] = useState<SimUi>({
-    period: "month", customDays: "14", sort: "cost", expanded: null, tokenAmt: "10,000", soon: null,
+    period: "month", customDays: "14", sort: "cost", expanded: null, tokenAmt: "10,000", mode: null, simG: null, simH: null,
+    fuelAmt: "10",
   });
   const [sheet, setSheet] = useState<SheetKind | null>(null);
   const [sheetShown, setSheetShown] = useState(false);
@@ -106,7 +107,6 @@ function AppliancesView({ initial }: { initial: Data }) {
   const [prevView, setPrevView] = useState(view);
   if (prevView !== view) {
     setPrevView(view);
-    setSimUiState((s) => ({ ...s, soon: null }));
     setSheetShown(false);
     setConfirm(false);
   }
@@ -126,6 +126,7 @@ function AppliancesView({ initial }: { initial: Data }) {
   const hoursPatch = inferredHoursPatch(settings, cal);
   if (hoursPatch) setSettings((s) => ({ ...s, ...hoursPatch }));
   const calib = calibContext(state, cal, T?.value ?? null);
+  const fuel = simFuel(generator, purchases, entries);
 
   const rows = sim ?? initSim(devices);
   const homeTot = unitsOf(sumSplits(homeSplits(calib, devices))).typical;
@@ -261,6 +262,7 @@ function AppliancesView({ initial }: { initial: Data }) {
             devices={devices}
             T={T}
             calib={calib}
+            fuel={fuel}
             hoursSource={settings.gridHoursSource}
             keptAt={meter.suggestionKeptAt}
             onSetHours={(h) => {
@@ -284,8 +286,7 @@ function AppliancesView({ initial }: { initial: Data }) {
             rows={rows}
             T={T}
             calib={calib}
-            generator={generator}
-            purchases={purchases}
+            fuel={fuel}
             ui={simUi}
             setUi={setSimUi}
             simEdit={simEdit}
@@ -345,6 +346,7 @@ function AppliancesView({ initial }: { initial: Data }) {
               setDraft={setDraft}
               T={T}
               calib={calib}
+              fuel={fuel}
               ctxTotal={draft.target === "sim" ? simTot : homeTot}
               home={devices}
               onBack={() => setSheet("picker")}
