@@ -108,12 +108,20 @@ export function Dashboard({
         <header className="flex h-16 items-center justify-between">
           <Logo />
           <div className="flex items-center gap-2">
-            <Link
-              href="/app/home"
-              className="inline-flex h-10 items-center rounded-xl bg-ink px-3.5 text-sm font-semibold whitespace-nowrap text-card no-underline"
-            >
-              My Home
-            </Link>
+            <nav className="flex gap-0.5 rounded-[13px] bg-track p-[3px]">
+              <span
+                aria-current="page"
+                className="inline-flex h-10 items-center rounded-[10px] bg-card px-3 text-sm font-semibold shadow-[0_1px_2px_rgba(25,23,18,0.12)]"
+              >
+                Spend
+              </span>
+              <Link
+                href="/app/home"
+                className="inline-flex h-10 items-center rounded-[10px] px-3 text-sm font-semibold whitespace-nowrap text-ink no-underline"
+              >
+                My Home
+              </Link>
+            </nav>
             <button
               type="button"
               onClick={onSettings}
