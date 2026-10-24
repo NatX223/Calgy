@@ -73,7 +73,7 @@ const UNITS: { id: RatingUnit; label: string }[] = [
   { id: "kW", label: "kW" },
 ];
 
-function Option({
+export function Option({
   on,
   onClick,
   title,
@@ -111,7 +111,7 @@ function Option({
   );
 }
 
-function Note({ tone, children }: { tone: "warn" | "error"; children: ReactNode }) {
+export function Note({ tone, children }: { tone: "warn" | "error"; children: ReactNode }) {
   return (
     <p
       role={tone === "error" ? "alert" : "status"}
@@ -388,6 +388,8 @@ export function GenReport({
   gen,
   summary: s,
   meterTariff,
+  calibratedPerKwh = null,
+  insight,
   header,
   onUpdateSize,
   children,
@@ -395,6 +397,9 @@ export function GenReport({
   gen: GeneratorProfile;
   summary: GenSummary;
   meterTariff: number | null;
+  /** Real ₦/kWh once fuel use is matched to device load; replaces the rough range. */
+  calibratedPerKwh?: number | null;
+  insight?: ReactNode;
   header: ReactNode;
   onUpdateSize: () => void;
   children?: ReactNode;
@@ -432,9 +437,9 @@ export function GenReport({
       </div>
 
       <div className="mt-3 flex flex-col gap-1.5 rounded-[20px] bg-ink p-[22px] text-card">
-        <Eyebrow className="text-ink-muted">Per unit (kWh)</Eyebrow>
+        <Eyebrow className="text-ink-muted">{calibratedPerKwh != null ? "Per unit (kWh) · matched to your devices" : "Per unit (kWh)"}</Eyebrow>
         <span className="text-[34px] leading-[1.05] font-extrabold tracking-[-0.035em] tabular-nums">
-          {naira10(s.perKwhLow)}–{naira10(s.perKwhHigh)}
+          {calibratedPerKwh != null ? `~${naira10(calibratedPerKwh)}` : `${naira10(s.perKwhLow)}–${naira10(s.perKwhHigh)}`}
           <span className="text-lg font-semibold text-ink-muted"> per unit</span>
         </span>
         {meterTariff != null && (
@@ -443,6 +448,8 @@ export function GenReport({
           </span>
         )}
       </div>
+
+      {insight && <div className="mt-3">{insight}</div>}
 
       <div className="mt-3 flex items-center justify-between gap-3 rounded-[18px] border border-line bg-card px-4 py-3.5">
         <span className="text-[15px] font-semibold">Price per litre you paid</span>

@@ -1,12 +1,14 @@
 // Calgy — Solar Compare: constants + pure model.
 // Ported from design_handoff_calgy_solar (solar.ts + the prototype's logic class).
-// Device energy maths (watts/daily/trio) is shared with Appliances.
+// Device energy maths comes from the shared engine (energy.ts). Solar sizes for full supply:
+// what the home would run if power were always there.
 
-import { fromPreset, lagosFlat, PRESET_BY, sumTrio, watts, type Device } from "./appliances";
+import { fromPreset, lagosFlat, PRESET_BY, sumTrio, type Device } from "./appliances";
+import { isKwhBased, resolveDraw } from "./energy";
 import { fU, iso, num, trimN } from "./format";
 import type { Entry, Settings } from "./spend";
 
-export const HEAVY_PRESETS = ["ac-1hp", "ac-15hp", "ac-15hp-inv", "iron", "kettle", "pump-05", "pump-1", "heater"];
+export const HEAVY_PRESETS = ["ac-1hp", "ac-15hp", "ac-2hp", "ac-15hp-inv", "iron", "kettle", "pump-05", "pump-1", "heater"];
 export const HEAVY_WATTS = 800; // any non-charging device ≥ this (typical tier) defaults to Heavy
 
 export const INVERTERS: [kva: number, priceNaira: number][] = [
@@ -99,11 +101,20 @@ export const money = (v: number) => {
 export const durationLabel = (m: number) =>
   m <= 36 ? `${m} month${m === 1 ? "" : "s"}` : `${Math.round(m / 6) / 2} years`;
 
+/** Watts while running (typical): energy-label devices use the compressor's draw, not the daily average. */
+const runningW = (d: Device) => {
+  const w = resolveDraw(d).typical;
+  if (!isKwhBased(d)) return w;
+  const fb = d.presetId ? PRESET_BY[d.presetId]?.fallback : undefined;
+  return fb ? fb.watts[1] : w / 0.45;
+};
+
 /** Running watts for peak sizing. Charging devices draw Wh ÷ 2, minimum 5W. */
-export const runWatts = (d: Device) => (d.type === "charging" ? Math.max(5, watts(d) / 2) : watts(d)) * Math.max(1, num(d.qty));
+export const runWatts = (d: Device) =>
+  (d.usage.profile === "charges" ? Math.max(5, runningW(d) / 2) : runningW(d)) * Math.max(1, num(d.quantity));
 
 export const isHeavyDefault = (d: Device) =>
-  HEAVY_PRESETS.includes(d.presetId ?? "") || (d.type !== "charging" && watts(d) >= HEAVY_WATTS);
+  HEAVY_PRESETS.includes(d.presetId ?? "") || (d.usage.profile !== "charges" && runningW(d) >= HEAVY_WATTS);
 
 export const tagOf = (tags: Record<string, Tag>, d: Device): Tag => tags[d.id] ?? (isHeavyDefault(d) ? "heavy" : "ess");
 
@@ -244,7 +255,7 @@ export const SAMPLE_SOURCE: SpendSource = {
 
 /** Lagos flat plus an inverter AC (4h), an iron and a pumping machine. */
 export function sampleHousehold(): Device[] {
-  const ac = { ...fromPreset(PRESET_BY["ac-15hp-inv"]), hours: 4 };
+  const ac = fromPreset(PRESET_BY["ac-15hp-inv"], 1, { hoursPerDay: 4 });
   return [...lagosFlat(), ac, fromPreset(PRESET_BY["iron"]), fromPreset(PRESET_BY["pump-05"])];
 }
 
@@ -277,8 +288,8 @@ export function computeSolar(i: SolarInputs) {
 
   // Load
   const solDevs = i.devices.filter((d) => whole || tagOf(i.tags, d) === "ess");
-  const day = sumTrio(solDevs);
-  const homeDay = sumTrio(i.devices);
+  const day = sumTrio(solDevs, null);
+  const homeDay = sumTrio(i.devices, null);
   const share = whole ? 1 : homeDay.typ ? day.typ / homeDay.typ : 0;
   const essW = solDevs.filter((d) => tagOf(i.tags, d) === "ess").map(runWatts);
   const heavyW = solDevs.filter((d) => tagOf(i.tags, d) === "heavy").map(runWatts);

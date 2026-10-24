@@ -59,3 +59,17 @@ export const fU = (n: number) => n.toLocaleString("en-NG", { minimumFractionDigi
 export const rN = (n: number, days: number) => (days >= 28 ? Math.round(n / 100) * 100 : Math.round(n / 10) * 10);
 export const shortN = (n: number) => (n >= 1e3 ? "₦" + String(Math.round(n / 100) / 10).replace(/\.0$/, "") + "k" : "₦" + n);
 export const hrsLabel = (h: number) => (h < 1 ? `${Math.round(h * 60)} min` : `${trimN(h)}h`);
+
+// Date-time inputs (<input type="datetime-local">) work in local "YYYY-MM-DDTHH:MM".
+export const toLocalInput = (isoTime: string) => {
+  const d = new Date(isoTime);
+  return `${iso(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+export const fromLocalInput = (s: string) => new Date(s).toISOString();
+export const nowLocalInput = () => toLocalInput(new Date().toISOString());
+/** "12 Oct" / "12 Oct, 09:30". */
+export const shortDate = (isoTime: string, time = false) => {
+  const d = new Date(isoTime);
+  const base = `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
+  return time ? `${base}, ${pad(d.getHours())}:${pad(d.getMinutes())}` : base;
+};

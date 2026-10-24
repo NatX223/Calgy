@@ -1,22 +1,32 @@
 "use client";
 
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { commas, dec, digits, fmtQ, nice, num, short, todayIso, trim } from "@/lib/format";
+import { commas, dec, digits, nice, num, short } from "@/lib/format";
+import { computeActualDaily, daysLeftRange } from "@/lib/meter";
 import type { PowerSource } from "@/lib/spend";
 import { Eyebrow, Logo, Marker, Segmented, SplitBar } from "../ui";
 
 export type ObState = {
   source: PowerSource;
   fuel: string; // ₦/week, legacy: gen costs now come from the generator questions
-  dailyKwh: string;
+  /** Meter questions: 1 at the meter, 2 last token, 3 hours of light. */
+  step: 1 | 2 | 3;
   unitsLeft: string;
+  dailyKwh: string; // the meter's own average, if it shows one
+  daysLeft: string;
+  totalUsed: string;
+  startDate: string; // YYYY-MM-DD, needed with totalUsed
   topupDate: string;
   topupPrice: string;
   topupUnits: string;
-  hours: number;
+  hoursMode: "auto" | "set";
+  hours: string;
+  /** The reading saved from these answers, so going back and forth updates it instead of adding another. */
+  readingId?: string;
 };
 
 const DAYS_PER_MONTH = 365 / 12;
+const trim1 = (n: number) => String(Math.round(n * 10) / 10);
 export const usesGrid = (s: PowerSource) => s !== "gen";
 export const usesGen = (s: PowerSource) => s !== "nepa";
 
@@ -26,10 +36,20 @@ export const obTariff = (ob: ObState) => {
   return units ? num(digits(ob.topupPrice)) / units : 0;
 };
 
+/** The meter answers as a profile (the meter's average and lifetime figures). */
+export const obProfile = (ob: ObState) => ({
+  meterDailyAvgKwh: num(ob.dailyKwh) || undefined,
+  lifetimeKwh: num(ob.totalUsed) && ob.startDate ? num(ob.totalUsed) : undefined,
+  meterStartDate: num(ob.totalUsed) && ob.startDate ? ob.startDate : undefined,
+});
+
+/** Daily kWh from what the meter shows (no readings yet). */
+export const obDaily = (ob: ObState) => computeActualDaily([], [], obProfile(ob), new Date()).value ?? 0;
+
 /** Rough monthly split from the onboarding answers. */
 export function obMonthly(ob: ObState) {
   const fuelM = usesGen(ob.source) ? (num(digits(ob.fuel)) * 52) / 12 : 0;
-  const tokenM = usesGrid(ob.source) ? num(ob.dailyKwh) * DAYS_PER_MONTH * obTariff(ob) : 0;
+  const tokenM = usesGrid(ob.source) ? obDaily(ob) * DAYS_PER_MONTH * obTariff(ob) : 0;
   return { fuelM, tokenM, monthly: fuelM + tokenM };
 }
 
@@ -84,68 +104,14 @@ export function Field({
   );
 }
 
-function NepaQuestions({ ob, setOb }: { ob: ObState; setOb: Dispatch<SetStateAction<ObState>> }) {
-  const set = (p: Partial<ObState>) => setOb((s) => ({ ...s, ...p }));
-  const tariff = obTariff(ob);
-  const daily = num(ob.dailyKwh);
-  const left = num(ob.unitsLeft);
-
+function MeterIntro({ hybrid }: { hybrid: boolean }) {
   return (
-    <>
-      <Section type="token" title="Your prepaid meter">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Average daily use" suffix="kWh" value={ob.dailyKwh} onChange={(v) => set({ dailyKwh: v })} />
-          <Field label="Units left" suffix="kWh" value={ob.unitsLeft} onChange={(v) => set({ unitsLeft: v })} />
-        </div>
-        {daily > 0 && left > 0 && (
-          <span className="font-mono text-[13px] text-muted">≈ {fmtQ(left / daily)} days left on the meter</span>
-        )}
-      </Section>
-
-      <Section type="token" title="Last token top-up">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Price paid" prefix="₦" money value={ob.topupPrice} onChange={(v) => set({ topupPrice: v })} />
-          <Field label="Units received" suffix="kWh" value={ob.topupUnits} onChange={(v) => set({ topupUnits: v })} />
-        </div>
-        <label className="flex min-w-0 flex-col gap-2">
-          <span className="text-sm font-semibold">Date</span>
-          <input
-            type="date"
-            value={ob.topupDate}
-            max={todayIso()}
-            onChange={(e) => set({ topupDate: e.target.value || todayIso() })}
-            className="h-[52px] w-full rounded-xl border-[1.5px] border-line bg-card px-3 text-base font-semibold outline-none"
-          />
-        </label>
-        {tariff > 0 && (
-          <span className="font-mono text-[13px] text-muted">₦{trim(tariff.toFixed(1))}/kWh on that top-up</span>
-        )}
-      </Section>
-
-      <div className="flex flex-col gap-1.5 border-y border-line py-5">
-        <div className="flex items-baseline justify-between gap-3">
-          <label htmlFor="ob-hours" className="text-[17px] font-semibold">
-            Light hours a day
-          </label>
-          <span className="text-[22px] font-extrabold tracking-[-0.02em]">{ob.hours} hrs</span>
-        </div>
-        <span className="text-sm text-muted">NEPA supply on a typical day</span>
-        <input
-          id="ob-hours"
-          type="range"
-          min={0}
-          max={24}
-          step={1}
-          value={ob.hours}
-          onChange={(e) => set({ hours: +e.target.value })}
-          className="m-0 h-11 w-full accent-light"
-        />
-        <div className="flex justify-between font-mono text-xs text-muted">
-          <span>0 · none</span>
-          <span>24 · steady</span>
-        </div>
-      </div>
-    </>
+    <Section type="token" title="Your prepaid meter">
+      <span className="text-base leading-[1.45] text-pretty text-muted">
+        Next: 3 quick questions at your meter — units left, your last token and your hours of light.
+        {hybrid ? " Then 4 about your gen." : ""}
+      </span>
+    </Section>
   );
 }
 
@@ -170,8 +136,8 @@ export function Onboarding({
   onSkip: () => void;
   onSeeEstimate: () => void;
 }) {
-  const { tokenM } = obMonthly(ob);
   const gen = usesGen(ob.source);
+  const grid = usesGrid(ob.source);
 
   return (
     <>
@@ -197,8 +163,8 @@ export function Onboarding({
           onChange={(source) => setOb((s) => ({ ...s, source }))}
         />
         <div className="mt-4">
-          {usesGrid(ob.source) && <NepaQuestions ob={ob} setOb={setOb} />}
-          {usesGen(ob.source) && <GenIntro />}
+          {grid && <MeterIntro hybrid={gen} />}
+          {gen && !grid && <GenIntro />}
         </div>
       </div>
 
@@ -206,10 +172,10 @@ export function Onboarding({
         <div className="mx-auto flex max-w-[440px] items-center gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="font-mono text-[11px] tracking-[0.06em] text-muted uppercase">
-              {gen ? (usesGrid(ob.source) ? "Light, monthly" : "Under a minute") : "Rough monthly"}
+              {grid ? "At your meter" : "Under a minute"}
             </span>
             <span className="text-2xl font-extrabold tracking-[-0.03em]">
-              {gen && !usesGrid(ob.source) ? "4 questions" : tokenM ? "~" + short(nice(tokenM)) : "₦0"}
+              {grid && gen ? "7 questions" : grid ? "3 questions" : "4 questions"}
             </span>
           </div>
           <button
@@ -217,7 +183,7 @@ export function Onboarding({
             onClick={onSeeEstimate}
             className="h-14 rounded-2xl bg-ink px-[22px] text-base font-bold text-card active:scale-[.97]"
           >
-            {gen ? "Next: your gen →" : "See my estimate →"}
+            {grid ? "Next: your meter →" : "Next: your gen →"}
           </button>
         </div>
       </div>
@@ -228,11 +194,23 @@ export function Onboarding({
 export function Reveal({ ob, onStart, onAdjust }: { ob: ObState; onStart: () => void; onAdjust: () => void }) {
   const { fuelM, tokenM, monthly } = obMonthly(ob);
   const fuelPct = monthly ? Math.round((fuelM / monthly) * 100) : 0;
-  const h = ob.hours;
-  const daily = num(ob.dailyKwh);
+  const auto = ob.hoursMode === "auto";
+  const h = num(ob.hours);
+  const daily = obDaily(ob);
   const left = num(ob.unitsLeft);
-  const gridLine = !usesGen(ob.source)
-    ? `About ${h} hours of light a day, using roughly ${fmtQ(daily)} kWh.`
+  const now = new Date().toISOString();
+  const days =
+    left > 0
+      ? daysLeftRange(left, null, {
+          id: "", unitsLeft: left, takenAt: now, context: "onboarding",
+          meterDaysLeft: ob.daysLeft.trim() ? num(ob.daysLeft) : undefined, meterDailyAvgKwh: num(ob.dailyKwh) || undefined,
+        }, obProfile(ob), now)
+      : null;
+  const fmtU = (n: number) => trim1(n);
+  const gridLine = auto
+    ? `Using roughly ${fmtU(daily)} units a day. Add your devices and Calgy works out your hours of light from your meter.`
+    : !usesGen(ob.source)
+    ? `About ${h} hours of light a day, using roughly ${fmtU(daily)} units.`
     : h >= 20
       ? `With about ${h} hours of light a day, your generator should be a small slice — watch for it creeping up.`
       : h === 0
@@ -280,9 +258,10 @@ export function Reveal({ ob, onStart, onAdjust }: { ob: ObState; onStart: () => 
       </div>
 
       <p className="mt-7 text-base leading-[1.45] text-pretty">{gridLine}</p>
-      {usesGrid(ob.source) && daily > 0 && left > 0 && (
+      {usesGrid(ob.source) && days && (
         <p className="mt-3 text-base leading-[1.45] text-pretty">
-          Your {fmtQ(left)} kWh left should last about {fmtQ(left / daily)} days — plan your next top-up around then.
+          Your {fmtU(left)} units left should last about {days.low === days.high ? days.low : `${days.low}–${days.high}`} days — plan
+          your next top-up around then.
         </p>
       )}
       <p className="mt-3 text-sm leading-normal text-pretty text-muted">

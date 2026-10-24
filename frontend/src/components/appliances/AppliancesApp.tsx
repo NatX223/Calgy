@@ -2,15 +2,19 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  derivedTariff, fromPreset, initSim, isModified, lagosFlat, sumTrio, toDevice,
+  derivedTariff, draftFrom, draftToDevice, initSim, isModified, lagosFlat, newCustomDraft, newDraft, toDevice,
   type Device, type Draft, type SimRow, type Tariff,
 } from "@/lib/appliances";
-import { loadHome, loadSpend, saveHome } from "@/lib/db";
-import { fU, uid } from "@/lib/format";
+import { sumSplits } from "@/lib/calibration";
+import { loadGen, loadHome, loadMeter, loadSpend, patchSettings, saveHome, saveMeter } from "@/lib/db";
+import { fU } from "@/lib/format";
+import type { FuelPurchase, GeneratorProfile } from "@/lib/generator";
+import { calibContext, calibrateHome, homeSplits, inferredHoursPatch, splitsOf, unitsOf } from "@/lib/home-calibration";
+import type { MeterReading, MeterState } from "@/lib/meter";
 import type { Preset } from "@/lib/presets";
-import type { Entry } from "@/lib/spend";
+import type { Entry, Settings } from "@/lib/spend";
 import { Logo, Toast, useEscape, useToast } from "../ui";
 import { DeviceEditor } from "./DeviceEditor";
 import { MyHome } from "./MyHome";
@@ -18,7 +22,16 @@ import { Picker } from "./Picker";
 import { Simulator, type SimUi } from "./Simulator";
 import { TariffSheet } from "./TariffSheet";
 
-type Data = { devices: Device[]; tariffOverride: number | null; entries: Entry[]; gridHours: number };
+type Data = {
+  devices: Device[];
+  tariffOverride: number | null;
+  entries: Entry[];
+  settings: Settings;
+  readings: MeterReading[];
+  meter: MeterState;
+  generator: GeneratorProfile | null;
+  purchases: FuelPurchase[];
+};
 
 /**
  * My Home inventory + Simulator. Mounted from a shared layout so the simulator's
@@ -29,13 +42,15 @@ export function AppliancesApp() {
 
   useEffect(() => {
     let live = true;
-    Promise.all([loadHome(), loadSpend()]).then(([home, spend]) => {
+    Promise.all([loadHome(), loadSpend(), loadMeter(), loadGen()]).then(([home, spend, meter, gen]) => {
       if (live)
         setData({
           devices: home.devices,
           tariffOverride: home.tariffOverride,
           entries: spend.entries,
-          gridHours: spend.settings.gridHours ?? 8,
+          settings: spend.settings,
+          ...meter,
+          ...gen,
         });
     });
     return () => {
@@ -55,7 +70,9 @@ function AppliancesView({ initial }: { initial: Data }) {
 
   const [devices, setDevices] = useState(initial.devices);
   const [tariffOverride, setTariffOverride] = useState(initial.tariffOverride);
-  const { entries, gridHours } = initial;
+  const [settings, setSettings] = useState(initial.settings);
+  const [meter, setMeter] = useState(initial.meter);
+  const { entries, readings, generator, purchases } = initial;
   const [sim, setSim] = useState<SimRow[] | null>(null);
   const [simUi, setSimUiState] = useState<SimUi>({
     period: "month", customDays: "14", sort: "cost", expanded: null, tokenAmt: "10,000", soon: null,
@@ -68,12 +85,21 @@ function AppliancesView({ initial }: { initial: Data }) {
   const [openCount, setOpenCount] = useState(0);
   const [confirm, setConfirm] = useState(false);
   const [highlight, setHighlight] = useState<string | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
   const highlightTimer = useRef<number | undefined>(undefined);
   const { toast, shown: toastShown, show: showToast } = useToast();
 
   useEffect(() => {
     saveHome(devices, tariffOverride);
   }, [devices, tariffOverride]);
+  // Only the light-hours and calibration settings change here; the rest belong to the spend screens.
+  useEffect(() => {
+    const { gridHours, gridHoursSource, gridHoursRange, calibrate } = settings;
+    patchSettings({ gridHours, gridHoursSource, gridHoursRange, calibrate });
+  }, [settings]);
+  useEffect(() => {
+    saveMeter(readings, meter);
+  }, [readings, meter]);
   useEffect(() => () => window.clearTimeout(highlightTimer.current), []);
 
   // Switching tabs (incl. browser back/forward) closes sheets and clears the "coming soon" explainer.
@@ -91,9 +117,21 @@ function AppliancesView({ initial }: { initial: Data }) {
   const derived = derivedTariff(entries);
   const T: Tariff | null = tariffOverride ? { value: tariffOverride, source: "Set by you" } : derived;
 
+  // Calibration re-runs whenever My Home's devices change (incl. "Save as My Home"), never inside the simulator.
+  const state = { settings, devices, entries, readings, meter, generator, purchases };
+  const cal = useMemo(
+    () => calibrateHome({ settings, devices, entries, readings, meter, generator, purchases }),
+    [settings, devices, entries, readings, meter, generator, purchases],
+  );
+  const hoursPatch = inferredHoursPatch(settings, cal);
+  if (hoursPatch) setSettings((s) => ({ ...s, ...hoursPatch }));
+  const calib = calibContext(state, cal, T?.value ?? null);
+
   const rows = sim ?? initSim(devices);
-  const homeTot = sumTrio(devices);
-  const simTot = sumTrio(rows.filter((r) => r.on));
+  const homeTot = unitsOf(sumSplits(homeSplits(calib, devices))).typical;
+  const simTot = unitsOf(
+    sumSplits(splitsOf(calib, rows.filter((r) => r.on).map((r) => ({ device: toDevice(r), baseId: r.baseId })))),
+  ).typical;
   const anyMod = rows.some((r) => isModified(r, devices)) || rows.length !== devices.length;
 
   const simEdit = (key: string, fn: (r: SimRow) => Partial<SimRow>) =>
@@ -121,27 +159,23 @@ function AppliancesView({ initial }: { initial: Data }) {
   };
 
   const openEditor = (d: Device) => {
-    setDraftState({ ...d, mode: "edit", target: "home", fromPicker: false, adv: false, isCustom: !d.tiers });
+    setDraftState(draftFrom(d));
     openSheet("editor");
   };
 
   const pickPreset = (p: Preset) => {
-    setDraftState({ ...fromPreset(p), mode: "add", target: pickTarget, fromPicker: true, adv: false, isCustom: false });
+    setDraftState(newDraft(p, pickTarget));
     setSheet("editor");
   };
 
   const pickCustom = (name: string) => {
-    setDraftState({
-      id: uid(), presetId: null, name, cat: "other", icon: "🔌", type: "steady", tiers: null, tier: "custom",
-      custom: "", hours: 4, charges: 1, duty: 50, qty: 1, help: null,
-      mode: "add", target: pickTarget, fromPicker: true, adv: true, isCustom: true,
-    });
+    setDraftState(newCustomDraft(name, pickTarget));
     setSheet("editor");
   };
 
   const saveDraft = () => {
     if (!draft) return;
-    const clean = toDevice(draft);
+    const clean = draftToDevice(draft);
     if (draft.mode === "edit") {
       setDevices((ds) => ds.map((x) => (x.id === clean.id ? clean : x)));
       setSim(null);
@@ -185,7 +219,7 @@ function AppliancesView({ initial }: { initial: Data }) {
     setDevices(lagosFlat());
     setSim(null);
     if (view !== "home") router.push("/app/home");
-    showToast("Typical Lagos flat added — edit anything");
+    setBanner("We added a typical setup. Tap any device to match your own.");
   };
 
   const confirmSave = () => {
@@ -226,7 +260,17 @@ function AppliancesView({ initial }: { initial: Data }) {
           <MyHome
             devices={devices}
             T={T}
-            gridHours={gridHours}
+            calib={calib}
+            hoursSource={settings.gridHoursSource}
+            keptAt={meter.suggestionKeptAt}
+            onSetHours={(h) => {
+              setSettings((s) => ({ ...s, gridHours: h, gridHoursSource: "user", gridHoursRange: null }));
+              setMeter((m) => ({ ...m, suggestionKeptAt: null }));
+              showToast(`Light hours set · ${h}h a day`);
+            }}
+            onKeepHours={() => setMeter((m) => ({ ...m, suggestionKeptAt: cal.grid?.confidence ?? "rough" }))}
+            banner={banner}
+            onDismissBanner={() => setBanner(null)}
             highlight={highlight}
             onOpen={openEditor}
             onAdd={() => openPicker("home")}
@@ -239,7 +283,9 @@ function AppliancesView({ initial }: { initial: Data }) {
             home={devices}
             rows={rows}
             T={T}
-            gridHours={gridHours}
+            calib={calib}
+            generator={generator}
+            purchases={purchases}
             ui={simUi}
             setUi={setSimUi}
             simEdit={simEdit}
@@ -280,7 +326,7 @@ function AppliancesView({ initial }: { initial: Data }) {
             : "pointer-events-none translate-y-[105%] wide:translate-x-[105%] wide:translate-y-0"
         }`}
       >
-        <div className="mx-auto grid max-h-[92vh] w-full max-w-[560px] grid-cols-1 content-start gap-4 overflow-y-auto rounded-t-[24px] bg-card px-5 pt-3 pb-[calc(20px+env(safe-area-inset-bottom))] shadow-[0_-12px_40px_rgba(25,23,18,0.18)] wide:h-full wide:max-h-full wide:max-w-none wide:rounded-l-[24px] wide:rounded-tr-none">
+        <div className="mx-auto grid max-h-[92vh] w-full max-w-[560px] auto-rows-max grid-cols-1 content-start gap-4 overflow-y-auto rounded-t-[24px] bg-card px-5 pt-3 pb-[calc(20px+env(safe-area-inset-bottom))] shadow-[0_-12px_40px_rgba(25,23,18,0.18)] wide:h-full wide:max-h-full wide:max-w-none wide:rounded-l-[24px] wide:rounded-tr-none">
           <div className="mx-auto h-1 w-10 rounded-sm bg-line wide:opacity-0" />
           {sheet === "picker" && (
             <Picker
@@ -298,8 +344,8 @@ function AppliancesView({ initial }: { initial: Data }) {
               draft={draft}
               setDraft={setDraft}
               T={T}
-              gridHours={gridHours}
-              ctxTotal={draft.target === "sim" ? simTot.typ : homeTot.typ}
+              calib={calib}
+              ctxTotal={draft.target === "sim" ? simTot : homeTot}
               home={devices}
               onBack={() => setSheet("picker")}
               onClose={closeSheet}

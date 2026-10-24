@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { daysIn, DOW, fmtQ, MONTHS, naira, nice, parseIso, short, trim, ymKey } from "@/lib/format";
 import { monthBuckets } from "@/lib/insights";
 import { byNewest, type Entry, type EntryType, type Settings } from "@/lib/spend";
@@ -18,6 +19,8 @@ type Props = {
   /** One-line gen summary; shows the gen card when set. */
   genLine?: string;
   onGen?: () => void;
+  /** Meter card and reminder (prepaid homes). */
+  meterSlot?: ReactNode;
   onLoadSample: () => void;
   /** Compare current month to the same days of last month, or to all of it. */
   compareBasis?: "same-period" | "full-month";
@@ -44,6 +47,7 @@ export function Dashboard({
   onInsights,
   genLine,
   onGen,
+  meterSlot,
   onLoadSample,
   compareBasis = "same-period",
   showPace = true,
@@ -208,6 +212,7 @@ export function Dashboard({
           </div>
         )}
 
+        {meterSlot}
         {onGen && genLine && <GenTeaser line={genLine} onClick={onGen} />}
         {onInsights && entries.length > 0 && <InsightsTeaser entries={entries} onClick={onInsights} />}
 

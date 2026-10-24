@@ -203,7 +203,7 @@ export function LoadSection({ ctx }: { ctx: SolarCtx }) {
   const { form, set, m, devices, devSource, mode } = ctx;
   const whole = form.scope === "whole";
   const essN = devices.filter((d) => tagOf(form.tags, d) === "ess").length;
-  const rows = [...devices].sort((a, b) => trio(b).typ - trio(a).typ);
+  const rows = [...devices].sort((a, b) => trio(b, null).typ - trio(a, null).typ);
 
   return (
     <Section eyebrow="02 · Load" title="What should solar power?">
@@ -230,7 +230,7 @@ export function LoadSection({ ctx }: { ctx: SolarCtx }) {
               {rows.map((d) => {
                 const t = tagOf(form.tags, d);
                 const dim = whole || t === "ess" ? "" : "opacity-45";
-                const qty = num(d.qty);
+                const qty = d.quantity;
                 return (
                   <div
                     key={d.id}
@@ -243,7 +243,7 @@ export function LoadSection({ ctx }: { ctx: SolarCtx }) {
                         {qty > 1 && <QtyBadge qty={qty} />}
                       </span>
                       <span className="font-mono text-xs text-muted">
-                        {fU(trio(d).typ)} units/day · {Math.round(runWatts(d)).toLocaleString("en-NG")}W
+                        {fU(trio(d, null).typ)} units/day · {Math.round(runWatts(d)).toLocaleString("en-NG")}W
                       </span>
                     </span>
                     <button

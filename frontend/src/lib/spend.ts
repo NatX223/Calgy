@@ -1,4 +1,5 @@
 import { daysIn, iso, num, uid } from "./format";
+import type { GridHoursSetting } from "./meter";
 
 export type EntryType = "fuel" | "token";
 
@@ -11,6 +12,10 @@ export type Entry = {
   date: string; // YYYY-MM-DD
   note: string | null;
   created_at: string; // ISO
+  /** Tokens: when it was loaded (ISO datetime). Older entries only have `date`. */
+  loaded_at?: string;
+  /** Tokens: the meter reading taken just before loading. */
+  before_reading_id?: string;
 };
 
 /** How the home is powered: generator only, prepaid grid only, or both. */
@@ -21,7 +26,13 @@ export type Settings = {
   source: PowerSource;
   fuelWeekly: number;
   tokenMonthly: number;
+  /** Light hours a day; only meaningful when `gridHoursSource` isn't "none". */
   gridHours: number;
+  gridHoursSource: GridHoursSetting["source"];
+  gridHoursRange: [number, number] | null;
+  /** "Match estimates to my meter and fuel". */
+  calibrate: boolean;
+  /** Legacy (pre meter flow): migrated into meter readings / profile. */
   dailyKwh: number;
   unitsLeft: number;
   unitsAsOf: string | null; // YYYY-MM-DD the units-left reading was taken
@@ -34,11 +45,27 @@ export const DEFAULT_SETTINGS: Settings = {
   fuelWeekly: 0,
   tokenMonthly: 0,
   gridHours: 8,
+  gridHoursSource: "none",
+  gridHoursRange: null,
+  calibrate: true,
   dailyKwh: 0,
   unitsLeft: 0,
   unitsAsOf: null,
   lastExport: null,
 };
+
+export const gridHoursSetting = (s: Settings): GridHoursSetting => ({
+  source: s.gridHoursSource,
+  value: s.gridHoursSource === "none" ? null : s.gridHours,
+  inferredRange: s.gridHoursSource === "inferred" && s.gridHoursRange ? s.gridHoursRange : undefined,
+});
+
+/** Saved settings, filled with defaults. Rows from before the meter flow had hours picked on a slider. */
+export function normaliseSettings(raw: Partial<Settings> | undefined): Settings {
+  const s = { ...DEFAULT_SETTINGS, ...(raw ?? {}) };
+  if (raw && raw.gridHoursSource === undefined) s.gridHoursSource = raw.onboarded ? "user" : "none";
+  return s;
+}
 
 /** Fixed id for the top-up captured during onboarding, so redoing it replaces rather than duplicates. */
 export const OB_TOPUP_ID = "ob-topup";
@@ -120,6 +147,10 @@ export function cleanImported(raw: unknown[]): Entry[] {
         date: x.date as string,
         note: typeof x.note === "string" && x.note ? x.note : null,
         created_at: typeof x.created_at === "string" ? x.created_at : new Date().toISOString(),
+        ...(x.type === "token" && typeof x.loaded_at === "string" && !Number.isNaN(Date.parse(x.loaded_at))
+          ? { loaded_at: x.loaded_at }
+          : {}),
+        ...(x.type === "token" && typeof x.before_reading_id === "string" ? { before_reading_id: x.before_reading_id } : {}),
       };
     });
 }

@@ -13,9 +13,12 @@ export function SettingsView({
   entryCount,
   settings: S,
   genLine,
+  hours,
   onBack,
   onRedo,
   onHours,
+  onHoursAuto,
+  onCalibrate,
   onExport,
   onImport,
   onSample,
@@ -24,9 +27,13 @@ export function SettingsView({
   entryCount: number;
   settings: Settings;
   genLine?: string;
+  /** Light hours the numbers use, and where they come from. */
+  hours: { value: number | null; source: Settings["gridHoursSource"] } | null;
   onBack: () => void;
   onRedo: () => void;
   onHours: (delta: number) => void;
+  onHoursAuto: () => void;
+  onCalibrate: (on: boolean) => void;
   onExport: () => void;
   onImport: (f: File) => void;
   onSample: () => void;
@@ -67,22 +74,54 @@ export function SettingsView({
         </button>
       </Card>
 
-      <Card className="items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <span className="text-base font-semibold">Hours of light a day</span>
-          <span className="text-sm text-muted">Typical NEPA supply</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <StepButton label="Fewer hours" onClick={() => onHours(-1)} className="bg-track-2 text-xl">
-            −
-          </StepButton>
-          <span className="min-w-16 text-center text-lg font-extrabold" aria-live="polite">
-            {S.gridHours} hrs
+      {hours && (
+        <Card className="flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <span className="text-base font-semibold">Hours of light a day</span>
+              <span className="text-sm text-muted">
+                {hours.source === "user"
+                  ? "You set this"
+                  : hours.source === "inferred"
+                    ? "Worked out from your meter"
+                    : "Calgy will work it out from your meter"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <StepButton label="Fewer hours" onClick={() => onHours(-1)} className="bg-track-2 text-xl">
+                −
+              </StepButton>
+              <span className="min-w-16 text-center text-lg font-extrabold" aria-live="polite">
+                {hours.value == null ? "—" : `${Math.round(hours.value * 2) / 2} hrs`}
+              </span>
+              <StepButton label="More hours" onClick={() => onHours(1)} className="bg-track-2 text-xl">
+                +
+              </StepButton>
+            </div>
+          </div>
+          {hours.source === "user" && (
+            <button type="button" onClick={onHoursAuto} className="h-10 self-start text-sm font-semibold text-light">
+              Let Calgy work it out instead
+            </button>
+          )}
+        </Card>
+      )}
+
+      <Card className="flex-col gap-1.5">
+        <label className="flex min-h-11 items-center justify-between gap-3">
+          <span className="flex flex-col gap-1">
+            <span className="text-base font-semibold">Match estimates to my meter and fuel</span>
+            <span className="text-sm leading-[1.4] text-muted">
+              Adjusts device estimates so they add up to what your meter and fuel logs show.
+            </span>
           </span>
-          <StepButton label="More hours" onClick={() => onHours(1)} className="bg-track-2 text-xl">
-            +
-          </StepButton>
-        </div>
+          <input
+            type="checkbox"
+            checked={S.calibrate}
+            onChange={(e) => onCalibrate(e.target.checked)}
+            className="h-6 w-6 shrink-0 accent-light"
+          />
+        </label>
       </Card>
 
       <Card className="flex-col gap-3">

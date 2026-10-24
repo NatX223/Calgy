@@ -18,7 +18,18 @@ const NOUN: Record<Period, string> = { day: "day", week: "week", month: "month" 
 const money = (n: number) => (n < 1000 ? naira(n) : short(n));
 const qty = (n: number) => (n > 0 && n < 1 ? trim(n.toFixed(2)) : fmtQ(n));
 
-export function Insights({ entries, settings: S, onBack }: { entries: Entry[]; settings: Settings; onBack: () => void }) {
+export function Insights({
+  entries,
+  settings: S,
+  supply,
+  onBack,
+}: {
+  entries: Entry[];
+  settings: Settings;
+  /** Light hours a day and where the figure comes from. */
+  supply?: { hours: number; label: string };
+  onBack: () => void;
+}) {
   const [period, setPeriod] = useState<Period>("day");
   const buckets = bucketsFor(period, entries);
   const cur = buckets[buckets.length - 1];
@@ -164,7 +175,7 @@ export function Insights({ entries, settings: S, onBack }: { entries: Entry[]; s
         </>
       )}
 
-      <SupplyDay hours={S.gridHours} source={S.source} />
+      <SupplyDay hours={supply?.hours ?? S.gridHours} source={S.source} sub={supply?.label ?? "From the light hours you set"} />
 
       {hasData && <DataTable buckets={buckets} unitSuffix={unitSuffix} />}
     </div>
@@ -418,11 +429,11 @@ function RateTile({
 }
 
 /** 24 hour cells: grid supply vs the rest of the day. */
-function SupplyDay({ hours, source }: { hours: number; source: Settings["source"] }) {
+function SupplyDay({ hours, source, sub }: { hours: number; source: Settings["source"]; sub: string }) {
   const off = 24 - hours;
   const offLabel = source === "nepa" ? "no light" : "generator or nothing";
   return (
-    <Card title="A typical day" sub="From the light hours you set">
+    <Card title="A typical day" sub={sub}>
       <div className="grid grid-cols-12 gap-[3px]" role="img" aria-label={`${hours} hours of NEPA, ${off} hours ${offLabel}`}>
         {Array.from({ length: 24 }, (_, i) => (
           <span

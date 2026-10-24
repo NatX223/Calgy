@@ -1,11 +1,17 @@
 "use client";
 
 import {
-  CAT_LABEL, CAT_ORDER, chargesDown, chargesUp, isModified, sumTrio, supplyWarning, trio, usageSummary,
-  type Device, type SimRow, type Tariff, type Tier,
+  CAT_LABEL, CAT_ORDER, chargesDown, chargesUp, isModified, toDevice, usageSummary,
+  type Device, type SimRow, type Tariff,
 } from "@/lib/appliances";
+import { computeGenActuals, genReady, predictedLph, sumSplits } from "@/lib/calibration";
+import { DEFAULT_GRID_HOURS } from "@/lib/calibration-constants";
+import { LIMITS } from "@/lib/energy";
 import { commas, dec, digits, fU, naira, num, rN, shortN, trimN } from "@/lib/format";
+import type { FuelPurchase, GeneratorProfile } from "@/lib/generator";
+import { splitsOf, supplyNote, toTrio, type Calib } from "@/lib/home-calibration";
 import { Chip, Eyebrow, StepButton } from "../ui";
+import { TierPicker } from "./DeviceEditor";
 import { costFor, QtyBadge } from "./MyHome";
 
 export type SimUi = {
@@ -30,7 +36,9 @@ export function Simulator({
   home,
   rows,
   T,
-  gridHours: g,
+  calib,
+  generator,
+  purchases,
   ui,
   setUi,
   simEdit,
@@ -46,7 +54,9 @@ export function Simulator({
   home: Device[];
   rows: SimRow[];
   T: Tariff | null;
-  gridHours: number;
+  calib: Calib;
+  generator: GeneratorProfile | null;
+  purchases: FuelPurchase[];
   ui: SimUi;
   setUi: (p: Partial<SimUi>) => void;
   simEdit: (key: string, fn: (r: SimRow) => Partial<SimRow>) => void;
@@ -65,9 +75,28 @@ export function Simulator({
     ui.period === "day" ? 1 : ui.period === "week" ? 7 : ui.period === "month" ? 30 : Math.max(1, Math.round(num(ui.customDays)) || 1);
   const perLabel = ui.period === "custom" ? `${days} day${days > 1 ? "s" : ""}` : ui.period;
 
-  const homeTot = sumTrio(home);
+  // This tab is the prepaid meter: grid-side units. A gen-only home gets a plain "what if I were on prepaid" view.
+  const pc: Calib = calib.household === "gen" ? { ...calib, result: null, household: "grid", G: DEFAULT_GRID_HOURS } : calib;
+  const g = Math.round(pc.G * 2) / 2;
+  const homeS = splitsOf(pc, home.map((d) => ({ device: d, baseId: d.id })));
+  const rowS = splitsOf(pc, rows.map((r) => ({ device: toDevice(r), baseId: r.baseId })));
+  const rowUnits = new Map(rows.map((r, i) => [r.key, toTrio(rowS[i].grid)]));
+  const trio = (r: SimRow) => rowUnits.get(r.key)!;
+  const homeTot = toTrio(sumSplits(homeS).grid);
   const onRows = rows.filter((r) => r.on);
-  const simTot = sumTrio(onRows);
+  const onS = rowS.filter((_, i) => rows[i].on);
+  const simTot = toTrio(sumSplits(onS).grid);
+
+  // Gen-side what-if (hybrid): fuel from the burn model at the new device load.
+  const H = calib.H;
+  const nairaPerLitre = generator ? computeGenActuals(purchases).nairaPerLitre : null;
+  const genFuelDelta =
+    calib.household === "hybrid" && calib.enabled && genReady(calib.result) && generator && H && nairaPerLitre
+      ? (predictedLph(generator, sumSplits(onS).gen.typical / H) - predictedLph(generator, sumSplits(homeS).gen.typical / H)) *
+        H *
+        nairaPerLitre *
+        30
+      : 0;
   const dTyp = simTot.typ - homeTot.typ;
   const pct = homeTot.typ ? Math.round((dTyp / homeTot.typ) * 100) : 0;
   const sign = dTyp < 0 ? "−" : "+";
@@ -78,10 +107,10 @@ export function Simulator({
   const sorted = [...rows].sort((a, b) =>
     ui.sort === "cost"
       ? Number(b.on) - Number(a.on) || trio(b).typ - trio(a).typ
-      : CAT_ORDER[a.cat] - CAT_ORDER[b.cat] || a.name.localeCompare(b.name),
+      : CAT_ORDER[a.category] - CAT_ORDER[b.category] || a.name.localeCompare(b.name),
   );
 
-  const warnCount = onRows.filter((r) => supplyWarning(r, g)).length;
+  const warnCount = onRows.filter((r) => supplyNote(r, pc)).length;
   const top = onRows
     .map((r) => ({ r, v: trio(r).typ }))
     .filter((x) => x.v > 0)
@@ -226,6 +255,13 @@ export function Simulator({
                     <span className="font-medium text-ink-line">vs My Home</span>
                   </div>
                 )}
+                {anyMod && Math.abs(genFuelDelta) >= 50 && (
+                  <span className={`text-sm font-semibold ${genFuelDelta < 0 ? "text-light-chip" : "text-fuel"}`}>
+                    {genFuelDelta < 0
+                      ? `Your changes also save ~${naira(rN(-genFuelDelta, 30))}/month in gen fuel.`
+                      : `Your changes also add ~${naira(rN(genFuelDelta, 30))}/month in gen fuel.`}
+                  </span>
+                )}
                 {onRows.length === 0 && (
                   <span className="text-sm text-ink-muted">Everything&apos;s switched off — nothing drawing from the meter.</span>
                 )}
@@ -302,7 +338,7 @@ export function Simulator({
                         <div className="flex justify-between gap-2.5 text-sm">
                           <span className="font-semibold">
                             {x.r.icon} {x.r.name}
-                            {num(x.r.qty) > 1 ? ` ×${num(x.r.qty)}` : ""}
+                            {x.r.quantity > 1 ? ` ×${x.r.quantity}` : ""}
                           </span>
                           <span className="font-mono text-muted">{p}%</span>
                         </div>
@@ -322,8 +358,9 @@ export function Simulator({
             <div className="flex min-w-0 flex-col">
               {warnCount > 0 && (
                 <div className="mb-3.5 rounded-[14px] bg-fuel-soft px-3.5 py-3 text-sm leading-[1.4] font-medium">
-                  {warnCount} device{warnCount > 1 ? "s are" : " is"} set to run longer than your ~{g}h of light a day. On
-                  prepaid alone, they can&apos;t.
+                  {pc.household === "hybrid"
+                    ? `${warnCount} device${warnCount > 1 ? "s are" : " is"} set to run longer than your light and gen hours together.`
+                    : `${warnCount} device${warnCount > 1 ? "s are" : " is"} set to run longer than your ~${g}h of light a day. On prepaid alone, they can't.`}
                 </div>
               )}
               <div className="flex items-center justify-between gap-3 border-b-[1.5px] border-ink pb-2">
@@ -358,7 +395,7 @@ export function Simulator({
                   key={r.key}
                   r={r}
                   home={home}
-                  g={g}
+                  warn={supplyNote(r, pc)}
                   showCat={ui.sort === "category"}
                   amount={T ? "~" + cost(trio(r).typ, days) : fU(trio(r).typ * days) + " u"}
                   expanded={ui.expanded === r.key}
@@ -408,7 +445,7 @@ export function Simulator({
 function SimRowView({
   r,
   home,
-  g,
+  warn: w,
   showCat,
   amount,
   expanded,
@@ -418,7 +455,7 @@ function SimRowView({
 }: {
   r: SimRow;
   home: Device[];
-  g: number;
+  warn: string;
   showCat: boolean;
   amount: string;
   expanded: boolean;
@@ -426,9 +463,9 @@ function SimRowView({
   edit: (fn: (r: SimRow) => Partial<SimRow>) => void;
   onRemove: () => void;
 }) {
-  const w = supplyWarning(r, g);
   const mod = isModified(r, home);
-  const unit = r.type === "charging" ? "Wh" : "W";
+  const u = r.usage;
+  const setUsage = (patch: Partial<SimRow["usage"]>) => edit((x) => ({ usage: { ...x.usage, ...patch } }));
   const dim = r.on ? "" : "opacity-40";
 
   return (
@@ -459,7 +496,7 @@ function SimRowView({
           <span className="flex min-w-0 items-center gap-2">
             <span className="text-lg">{r.icon}</span>
             <span className="truncate text-base font-semibold">{r.name}</span>
-            {num(r.qty) > 1 && <QtyBadge qty={num(r.qty)} />}
+            {r.quantity > 1 && <QtyBadge qty={r.quantity} />}
             {mod && (
               <span className="h-5 shrink-0 rounded-[5px] bg-fuel-soft px-1.5 font-mono text-[10px] leading-5 tracking-[0.04em] text-fuel-ink uppercase">
                 {r.baseId ? "Modified" : "Added"}
@@ -467,7 +504,7 @@ function SimRowView({
             )}
           </span>
           <span className={`font-mono text-xs ${w && r.on ? "text-fuel-ink" : "text-muted"}`}>
-            {showCat ? CAT_LABEL[r.cat] + " · " : ""}
+            {showCat ? CAT_LABEL[r.category] + " · " : ""}
             {usageSummary(r)}
           </span>
         </button>
@@ -482,25 +519,27 @@ function SimRowView({
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm font-semibold">Quantity</span>
             <div className="flex items-center gap-1">
-              <StepButton label="Fewer" onClick={() => edit((x) => ({ qty: Math.max(1, num(x.qty) - 1) }))} className="bg-track">
+              <StepButton label="Fewer" onClick={() => edit((x) => ({ quantity: Math.max(LIMITS.quantity[0], x.quantity - 1) }))} className="bg-track">
                 −
               </StepButton>
-              <span className="min-w-9 text-center text-[17px] font-extrabold">{num(r.qty)}</span>
-              <StepButton label="More" onClick={() => edit((x) => ({ qty: Math.min(99, num(x.qty) + 1) }))} className="bg-track">
+              <span className="min-w-9 text-center text-[17px] font-extrabold">{r.quantity}</span>
+              <StepButton label="More" onClick={() => edit((x) => ({ quantity: Math.min(LIMITS.quantity[1], x.quantity + 1) }))} className="bg-track">
                 +
               </StepButton>
             </div>
           </div>
 
-          {r.type === "charging" ? (
+          {u.profile === "always_on_battery" ? (
+            <span className="text-[13px] text-muted">Always on · runs on its battery when light goes.</span>
+          ) : u.profile === "charges" ? (
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-semibold">Charges a day</span>
               <div className="flex items-center gap-1">
-                <StepButton label="Fewer charges" onClick={() => edit((x) => ({ charges: chargesDown(num(x.charges)) }))} className="bg-track">
+                <StepButton label="Fewer charges" onClick={() => setUsage({ chargesPerDay: chargesDown(u.chargesPerDay ?? 0) })} className="bg-track">
                   −
                 </StepButton>
-                <span className="min-w-9 text-center text-[17px] font-extrabold">{trimN(num(r.charges))}</span>
-                <StepButton label="More charges" onClick={() => edit((x) => ({ charges: chargesUp(num(x.charges)) }))} className="bg-track">
+                <span className="min-w-9 text-center text-[17px] font-extrabold">{trimN(u.chargesPerDay ?? 0)}</span>
+                <StepButton label="More charges" onClick={() => setUsage({ chargesPerDay: chargesUp(u.chargesPerDay ?? 0) })} className="bg-track">
                   +
                 </StepButton>
               </div>
@@ -513,10 +552,11 @@ function SimRowView({
                   <input
                     inputMode="decimal"
                     aria-label={`Hours a day for ${r.name}`}
-                    value={String(r.hours)}
+                    value={r.hoursText ?? String(u.hoursPerDay ?? 0)}
                     onChange={(e) => {
                       const v = dec(e.target.value);
-                      edit(() => ({ hours: num(v) > 24 ? 24 : v }));
+                      const h = Math.min(24, num(v));
+                      edit((x) => ({ hoursText: num(v) > 24 ? "24" : v, usage: { ...x.usage, hoursPerDay: h } }));
                     }}
                     className="w-11 bg-transparent text-right text-base font-bold outline-none"
                   />
@@ -529,32 +569,14 @@ function SimRowView({
                 max={24}
                 step={0.5}
                 aria-label={`Hours a day for ${r.name}`}
-                value={num(r.hours)}
-                onChange={(e) => edit(() => ({ hours: +e.target.value }))}
+                value={u.hoursPerDay ?? 0}
+                onChange={(e) => edit((x) => ({ hoursText: undefined, usage: { ...x.usage, hoursPerDay: +e.target.value } }))}
                 className="m-0 h-9 w-full accent-light"
               />
             </div>
           )}
 
-          {r.tiers && (
-            <div className="grid grid-cols-3 gap-1 rounded-xl bg-track p-1">
-              {(["low", "typical", "high"] as Tier[]).map((tk, i) => (
-                <button
-                  key={tk}
-                  type="button"
-                  aria-pressed={r.tier === tk}
-                  onClick={() => edit(() => ({ tier: tk }))}
-                  className={`flex min-h-12 flex-col items-center justify-center gap-px rounded-[9px] ${segClass(r.tier === tk)}`}
-                >
-                  <span className="text-[13px] font-bold capitalize">{tk}</span>
-                  <span className="font-mono text-[11px]">
-                    {r.tiers![i]}
-                    {unit}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
+          <TierPicker dev={r} value={r.tierOverride} onChange={(t) => edit(() => ({ tierOverride: t }))} compact />
 
           {w && <span className="text-[13px] leading-[1.4] text-fuel-ink">{w}</span>}
 
@@ -564,7 +586,7 @@ function SimRowView({
                 type="button"
                 onClick={() => {
                   const b = home.find((x) => x.id === r.baseId);
-                  if (b) edit(() => ({ ...b, on: true }));
+                  if (b) edit(() => ({ ...b, on: true, hoursText: undefined }));
                 }}
                 className="h-10 rounded-[10px] border-[1.5px] border-line-strong px-3.5 text-[13px] font-semibold"
               >

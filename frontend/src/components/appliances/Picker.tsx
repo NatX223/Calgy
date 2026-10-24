@@ -1,6 +1,6 @@
 "use client";
 
-import { CAT_LABEL } from "@/lib/appliances";
+import { CAT_LABEL, presetFigure } from "@/lib/appliances";
 import { CATEGORIES, PRESETS, type Preset } from "@/lib/presets";
 import { Chip } from "../ui";
 
@@ -51,7 +51,7 @@ export function Picker({
         </span>
         <input
           type="search"
-          placeholder="Search fan, freezer, AC…"
+          placeholder="Search fan, freezer, phone, router…"
           aria-label="Search devices"
           value={q}
           onChange={(e) => setPick({ q: e.target.value })}
@@ -81,11 +81,7 @@ export function Picker({
             <span className="flex h-10 w-10 items-center justify-center rounded-[11px] bg-track-2 text-xl">{p.icon}</span>
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="text-[15px] font-semibold">{p.name}</span>
-              <span className="font-mono text-xs text-muted">
-                {p.type === "charging"
-                  ? `~${p.tiers[1]}Wh per charge`
-                  : `~${p.tiers[1].toLocaleString("en-NG")}W${p.type === "cycling" ? " · cycles on/off" : ""}`}
-              </span>
+              <span className="font-mono text-xs text-muted">{presetFigure(p)}</span>
             </span>
             <span
               aria-hidden="true"
@@ -108,7 +104,7 @@ export function Picker({
           <span className="flex h-10 w-10 items-center justify-center rounded-[11px] bg-track-2 text-xl">🔌</span>
           <span className="flex flex-col gap-0.5">
             <span className="text-[15px] font-bold">Custom device</span>
-            <span className="text-[13px] text-muted">Not listed? Use the watts on its label.</span>
+            <span className="text-[13px] text-muted">Not listed? Enter what&apos;s on its label.</span>
           </span>
         </button>
       </div>

@@ -1,14 +1,22 @@
 "use client";
 
-import { supplyWarning, sumTrio, trio, usageSummary, type Device, type Tariff } from "@/lib/appliances";
-import { fU, naira, num, rN } from "@/lib/format";
+import { fromLabel, usageSummary, type Device, type Tariff } from "@/lib/appliances";
+import { sumSplits } from "@/lib/calibration";
+import { fU, naira, rN } from "@/lib/format";
+import { canPrice, homeSplits, nairaOf, supplyNote, toTrio, unitsOf, type Calib } from "@/lib/home-calibration";
+import type { Confidence } from "@/lib/meter";
+import type { Settings } from "@/lib/spend";
 import Link from "next/link";
 import { CATEGORIES } from "@/lib/presets";
+import { CalBadges, fH, GenInsightCard, HybridSummary, LightHoursCard, RealityCard } from "../Calibration";
 import { Eyebrow } from "../ui";
 
 /** ₦ for kWh/day over a period, rounded per the period rule. */
 export const costFor = (T: Tariff | null) => (kwhPerDay: number, days: number) =>
   naira(rN(kwhPerDay * days * (T?.value ?? 0), days));
+
+/** ₦ for ₦/day over a period, rounded per the period rule. */
+export const moneyFor = (nairaPerDay: number, days: number) => naira(rN(nairaPerDay * days, days));
 
 export function QtyBadge({ qty }: { qty: number }) {
   return (
@@ -16,10 +24,34 @@ export function QtyBadge({ qty }: { qty: number }) {
   );
 }
 
+export function SourceBadge({ d }: { d: Device }) {
+  return (
+    <span
+      className={`h-5 shrink-0 rounded-[5px] px-1.5 font-mono text-[10px] leading-5 tracking-[0.04em] uppercase ${
+        fromLabel(d) ? "bg-light-chip text-ink" : "bg-track text-muted"
+      }`}
+    >
+      {fromLabel(d) ? "From label" : "Typical"}
+    </span>
+  );
+}
+
+const HOURS_SOURCE: Record<Settings["gridHoursSource"], string> = {
+  user: "you set",
+  inferred: "from your meter",
+  none: "assumed",
+};
+
 export function MyHome({
   devices,
   T,
-  gridHours: g,
+  calib,
+  hoursSource,
+  keptAt,
+  onSetHours,
+  onKeepHours,
+  banner,
+  onDismissBanner,
   highlight,
   onOpen,
   onAdd,
@@ -29,7 +61,13 @@ export function MyHome({
 }: {
   devices: Device[];
   T: Tariff | null;
-  gridHours: number;
+  calib: Calib;
+  hoursSource: Settings["gridHoursSource"];
+  keptAt: Confidence | null;
+  onSetHours: (h: number) => void;
+  onKeepHours: () => void;
+  banner: string | null;
+  onDismissBanner: () => void;
   highlight: string | null;
   onOpen: (d: Device) => void;
   onAdd: () => void;
@@ -37,38 +75,55 @@ export function MyHome({
   onLagos: () => void;
   onTariff: () => void;
 }) {
-  const tot = sumTrio(devices);
-  const cost = costFor(T);
-  const qtyTotal = devices.reduce((a, d) => a + Math.max(1, num(d.qty)), 0);
-  const groups = CATEGORIES.map((c) => ({ ...c, items: devices.filter((d) => d.cat === c.id) })).filter(
+  const { household: hh, result: r, enabled } = calib;
+  const splits = homeSplits(calib, devices);
+  const split = new Map(devices.map((d, i) => [d.id, splits[i]]));
+  const tot = sumSplits(splits);
+  const units = toTrio(unitsOf(tot));
+  const money = canPrice(calib) ? nairaOf(calib, tot) : null;
+  const qtyTotal = devices.reduce((a, d) => a + Math.max(1, d.quantity), 0);
+  const groups = CATEGORIES.map((c) => ({ ...c, items: devices.filter((d) => d.category === c.id) })).filter(
     (g) => g.items.length,
   );
   const pill = "inline-flex h-8 items-center rounded-full bg-ink-pill px-3 text-[13px] font-medium whitespace-nowrap";
+  const intro =
+    hh === "gen"
+      ? "The devices you run on your gen, and roughly what they cost."
+      : hh === "hybrid"
+        ? "The devices you run on light and gen, and roughly what they cost."
+        : "The devices you run on light, and roughly what they cost.";
 
   return (
     <>
       <div className="flex flex-col pt-3 pb-[132px]">
         <h1 className="text-4xl leading-none font-extrabold tracking-[-0.04em]">My Home</h1>
-        <p className="mt-2 mb-[22px] text-[15px] leading-[1.45] text-pretty text-muted">
-          The devices you run on light, and roughly what they cost.
-        </p>
+        <p className="mt-2 mb-[22px] text-[15px] leading-[1.45] text-pretty text-muted">{intro}</p>
 
+        {banner && devices.length > 0 && (
+          <div className="mb-3.5 flex items-center gap-2.5 rounded-xl bg-fuel-soft px-3.5 py-2.5 text-sm leading-[1.4]">
+            <span className="flex-1">{banner}</span>
+            <button type="button" onClick={onDismissBanner} aria-label="Dismiss" className="h-8 w-8 text-sm">
+              ✕
+            </button>
+          </div>
+        )}
         {devices.length > 0 ? (
           <>
             <div className="flex flex-col gap-[18px] rounded-[22px] bg-ink p-[22px] text-card">
               <Eyebrow className="text-ink-muted">Estimated · per month</Eyebrow>
-              {T ? (
+              {money ? (
                 <>
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[52px] leading-none font-extrabold tracking-[-0.05em]">~{cost(tot.typ, 30)}</span>
+                    <span className="text-[52px] leading-none font-extrabold tracking-[-0.05em]">~{moneyFor(money.typical, 30)}</span>
                     <span className="font-mono text-[13px] text-ink-muted">
-                      {cost(tot.lo, 30)} – {cost(tot.hi, 30)}
+                      {moneyFor(money.low, 30)} – {moneyFor(money.high, 30)}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1 border-t border-ink-line pt-3.5">
-                    <span className="text-lg font-bold">~{fU(tot.typ * 30)} units (kWh)</span>
+                    <span className="text-lg font-bold">~{fU(units.typ * 30)} units (kWh)</span>
                     <span className="font-mono text-xs text-ink-muted">
-                      {fU(tot.lo * 30)} – {fU(tot.hi * 30)} units (kWh)
+                      {fU(units.lo * 30)} – {fU(units.hi * 30)} units (kWh)
+                      {hh === "hybrid" ? ` · ${fU(tot.grid.typical * 30)} light, ${fU(tot.gen.typical * 30)} gen` : ""}
                     </span>
                   </div>
                 </>
@@ -76,29 +131,53 @@ export function MyHome({
                 <>
                   <div className="flex flex-col gap-1.5">
                     <span className="text-[44px] leading-none font-extrabold tracking-[-0.045em]">
-                      ~{fU(tot.typ * 30)} units
+                      ~{fU(units.typ * 30)} units
                     </span>
                     <span className="font-mono text-[13px] text-ink-muted">
-                      {fU(tot.lo * 30)} – {fU(tot.hi * 30)} units (kWh)
+                      {fU(units.lo * 30)} – {fU(units.hi * 30)} units (kWh)
                     </span>
                   </div>
-                  <button type="button" onClick={onTariff} className="h-12 rounded-[14px] bg-fuel text-[15px] font-bold text-ink">
-                    Set your tariff to see ₦ →
-                  </button>
+                  {hh !== "gen" && calib.tariff == null ? (
+                    <button type="button" onClick={onTariff} className="h-12 rounded-[14px] bg-fuel text-[15px] font-bold text-ink">
+                      Set your tariff to see ₦ →
+                    </button>
+                  ) : (
+                    <span className="text-sm text-ink-muted">Log a fuel purchase to see what your gen side costs.</span>
+                  )}
                 </>
               )}
               <div className="flex flex-wrap gap-2">
                 <span className={pill}>
                   {qtyTotal} device{qtyTotal === 1 ? "" : "s"}
                 </span>
-                <span className={pill}>~{g}h light a day</span>
-                {T && (
+                {hh !== "gen" && (
+                  <span className={pill}>
+                    ~{fH(calib.G)}h light a day · {HOURS_SOURCE[hoursSource]}
+                  </span>
+                )}
+                {hh !== "grid" && calib.H ? <span className={pill}>~{fH(calib.H)}h gen a day</span> : null}
+                {T && hh !== "gen" && (
                   <button type="button" onClick={onTariff} className={`${pill} gap-1.5 text-card`}>
-                    ₦{fU(T.value)}/kWh · {T.source === "Set by you" ? "set by you" : "from tokens"}{" "}
+                    ₦{fU(T.value)}/kWh · {T.source.toLowerCase()}{" "}
                     <span className="text-fuel">Edit</span>
                   </button>
                 )}
+                <CalBadges r={r} enabled={enabled} />
               </div>
+            </div>
+
+            <div className="mt-3.5 flex flex-col gap-3">
+              <LightHoursCard r={r} enabled={enabled} keptAt={keptAt} onSet={onSetHours} onKeep={onKeepHours} />
+              <RealityCard r={r} enabled={enabled} />
+              <HybridSummary
+                r={r}
+                enabled={enabled}
+                gridDaily={tot.grid.typical}
+                genDaily={tot.gen.typical}
+                gridTariff={calib.tariff}
+                genRate={calib.genRate}
+              />
+              <GenInsightCard r={r} enabled={enabled} gridTariff={calib.tariff} />
             </div>
 
             <div className="mt-7 flex flex-col gap-[22px]">
@@ -106,7 +185,9 @@ export function MyHome({
                 <div key={grp.id} className="flex flex-col">
                   <Eyebrow className="border-b-[1.5px] border-ink pb-1.5">{grp.label}</Eyebrow>
                   {grp.items.map((d) => {
-                    const w = supplyWarning(d, g);
+                    const w = supplyNote(d, calib);
+                    const s = split.get(d.id)!;
+                    const n = money ? nairaOf(calib, s) : null;
                     return (
                       <button
                         key={d.id}
@@ -122,16 +203,17 @@ export function MyHome({
                         <span className="flex min-w-0 flex-col gap-[3px]">
                           <span className="flex min-w-0 items-center gap-2">
                             <span className="truncate text-base font-semibold">{d.name}</span>
-                            {d.qty > 1 && <QtyBadge qty={d.qty} />}
+                            {d.quantity > 1 && <QtyBadge qty={d.quantity} />}
+                            <SourceBadge d={d} />
                           </span>
                           <span className={`font-mono text-xs ${w ? "text-fuel-ink" : "text-muted"}`}>
+                            {w && <span aria-label="Set longer than your power is on">⚠ </span>}
                             {usageSummary(d)}
-                            {w ? " · over light hours" : ""}
                           </span>
                         </span>
                         <span className="flex flex-col items-end gap-0.5">
                           <span className="text-base font-bold tabular-nums">
-                            {T ? "~" + cost(trio(d).typ, 30) : fU(trio(d).typ * 30) + " units"}
+                            {n ? "~" + moneyFor(n.typical, 30) : fU(unitsOf(s).typical * 30) + " units"}
                           </span>
                           <span className="font-mono text-[11px] text-muted">/ month</span>
                         </span>
@@ -179,7 +261,7 @@ export function MyHome({
                 className="flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl border-[1.5px] border-line-strong px-4 py-2"
               >
                 <span className="text-base font-bold">Start with a typical Lagos flat</span>
-                <span className="text-xs text-muted">Fans, bulbs, TV, fridge, router, phones, laptop</span>
+                <span className="text-xs text-muted">Fans, bulbs, TV, fridge, router, phones, laptop, iron</span>
               </button>
             </div>
           </div>
