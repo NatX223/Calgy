@@ -126,6 +126,12 @@ export function Dashboard({
               >
                 My Home
               </Link>
+              <Link
+                href="/app/simulator"
+                className="inline-flex h-10 items-center rounded-[10px] px-3 text-sm font-semibold whitespace-nowrap text-ink no-underline"
+              >
+                Simulator
+              </Link>
             </nav>
             <button
               type="button"
