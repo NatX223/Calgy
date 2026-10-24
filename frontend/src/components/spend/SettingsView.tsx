@@ -12,6 +12,7 @@ function Card({ children, className = "flex-col gap-2.5" }: { children: ReactNod
 export function SettingsView({
   entryCount,
   settings: S,
+  genLine,
   onBack,
   onRedo,
   onHours,
@@ -22,6 +23,7 @@ export function SettingsView({
 }: {
   entryCount: number;
   settings: Settings;
+  genLine?: string;
   onBack: () => void;
   onRedo: () => void;
   onHours: (delta: number) => void;
@@ -51,14 +53,17 @@ export function SettingsView({
         <span className="text-base leading-[1.45]">
           {guess
             ? `~${short(nice(guess))} a month from your guesses — fuel ${short(S.fuelWeekly || 0)}/week, tokens ${short(S.tokenMonthly || 0)}/month.`
-            : "Not set. Takes under a minute."}
+            : genLine
+              ? null
+              : "Not set. Takes under a minute."}
         </span>
+        {genLine && <span className="font-mono text-[13px] text-muted">Gen: {genLine}</span>}
         <button
           type="button"
           onClick={onRedo}
           className="h-11 self-start rounded-xl border-[1.5px] border-line-strong px-4 text-sm font-semibold"
         >
-          {guess ? "Redo quick estimate" : "Do quick estimate"}
+          {guess || genLine ? "Redo quick estimate" : "Do quick estimate"}
         </button>
       </Card>
 

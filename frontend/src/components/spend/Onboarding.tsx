@@ -7,7 +7,7 @@ import { Eyebrow, Logo, Marker, Segmented, SplitBar } from "../ui";
 
 export type ObState = {
   source: PowerSource;
-  fuel: string; // ₦/week, kept for the upcoming Gen questions
+  fuel: string; // ₦/week, legacy: gen costs now come from the generator questions
   dailyKwh: string;
   unitsLeft: string;
   topupDate: string;
@@ -51,7 +51,7 @@ function Section({ type, title, children }: { type: "fuel" | "token"; title: str
   );
 }
 
-function Field({
+export function Field({
   label,
   prefix,
   suffix,
@@ -149,15 +149,12 @@ function NepaQuestions({ ob, setOb }: { ob: ObState; setOb: Dispatch<SetStateAct
   );
 }
 
-function GenComingSoon() {
+function GenIntro() {
   return (
     <Section type="fuel" title="Generator">
-      <div className="flex flex-col gap-1 rounded-[14px] border-[1.5px] border-dashed border-line-strong px-4 py-5">
-        <Eyebrow>Coming soon</Eyebrow>
-        <span className="text-base leading-[1.45] text-pretty text-muted">
-          Generator questions are on the way. For now, log fuel top-ups from the dashboard.
-        </span>
-      </div>
+      <span className="text-base leading-[1.45] text-pretty text-muted">
+        Next: 4 quick questions about your gen and your last fuel purchase. Have the receipt handy if you kept it.
+      </span>
     </Section>
   );
 }
@@ -173,7 +170,8 @@ export function Onboarding({
   onSkip: () => void;
   onSeeEstimate: () => void;
 }) {
-  const { monthly } = obMonthly(ob);
+  const { tokenM } = obMonthly(ob);
+  const gen = usesGen(ob.source);
 
   return (
     <>
@@ -200,16 +198,18 @@ export function Onboarding({
         />
         <div className="mt-4">
           {usesGrid(ob.source) && <NepaQuestions ob={ob} setOb={setOb} />}
-          {usesGen(ob.source) && <GenComingSoon />}
+          {usesGen(ob.source) && <GenIntro />}
         </div>
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-20 bg-[linear-gradient(to_top,#F2EEE4_70%,rgba(242,238,228,0))] px-5 pt-7 pb-[calc(16px+env(safe-area-inset-bottom))]">
         <div className="mx-auto flex max-w-[440px] items-center gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="font-mono text-[11px] tracking-[0.06em] text-muted uppercase">Rough monthly</span>
+            <span className="font-mono text-[11px] tracking-[0.06em] text-muted uppercase">
+              {gen ? (usesGrid(ob.source) ? "Light, monthly" : "Under a minute") : "Rough monthly"}
+            </span>
             <span className="text-2xl font-extrabold tracking-[-0.03em]">
-              {monthly ? "~" + short(nice(monthly)) : "₦0"}
+              {gen && !usesGrid(ob.source) ? "4 questions" : tokenM ? "~" + short(nice(tokenM)) : "₦0"}
             </span>
           </div>
           <button
@@ -217,7 +217,7 @@ export function Onboarding({
             onClick={onSeeEstimate}
             className="h-14 rounded-2xl bg-ink px-[22px] text-base font-bold text-card active:scale-[.97]"
           >
-            See my estimate →
+            {gen ? "Next: your gen →" : "See my estimate →"}
           </button>
         </div>
       </div>

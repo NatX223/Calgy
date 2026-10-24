@@ -12,6 +12,7 @@ export type SheetState = {
   type: EntryType;
   amount: string;
   qty: string;
+  hours: string; // gen hours, fuel only
   date: string;
   note: string;
 };
@@ -20,6 +21,7 @@ export function LogSheet({
   sheet: sh,
   setSheet,
   entries,
+  showHours,
   amountRef,
   onClose,
   onSave,
@@ -28,6 +30,8 @@ export function LogSheet({
   sheet: SheetState;
   setSheet: (p: Partial<SheetState>) => void;
   entries: Entry[];
+  /** Ask how long the fuel ran the gen (once a generator is set up). */
+  showHours: boolean;
   amountRef: RefObject<HTMLInputElement | null>;
   onClose: () => void;
   onSave: () => void;
@@ -156,6 +160,27 @@ export function LogSheet({
             </label>
           </div>
           <span className={`-mt-1.5 font-mono text-[13px] ${derivedClass}`}>{derived}</span>
+
+          {isFuel && showHours && (
+            <label className="flex min-w-0 flex-col gap-2">
+              <span className="text-sm font-semibold">
+                Hours it ran the gen <span className="font-normal text-muted">· optional</span>
+              </span>
+              <span className="flex h-[52px] items-center gap-1.5 rounded-xl border-[1.5px] border-line bg-paper px-3.5">
+                <input
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={sh.hours}
+                  onChange={(e) => setSheet({ hours: dec(e.target.value) })}
+                  className="min-w-0 flex-1 bg-transparent p-0 text-lg font-bold outline-none"
+                />
+                <span className="font-mono text-[13px] text-muted">hours</span>
+              </span>
+              <span className="text-[13px] text-muted">
+                {q ? "Sharpens your gen cost per hour." : "Add litres too so this counts toward your gen numbers."}
+              </span>
+            </label>
+          )}
 
           <input
             placeholder="Note (optional) — e.g. station dry, bought by roadside"

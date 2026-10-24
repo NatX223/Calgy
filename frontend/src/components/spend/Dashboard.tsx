@@ -15,6 +15,9 @@ type Props = {
   onEdit: (e: Entry) => void;
   onSettings: () => void;
   onInsights?: () => void;
+  /** One-line gen summary; shows the gen card when set. */
+  genLine?: string;
+  onGen?: () => void;
   onLoadSample: () => void;
   /** Compare current month to the same days of last month, or to all of it. */
   compareBasis?: "same-period" | "full-month";
@@ -39,6 +42,8 @@ export function Dashboard({
   onEdit,
   onSettings,
   onInsights,
+  genLine,
+  onGen,
   onLoadSample,
   compareBasis = "same-period",
   showPace = true,
@@ -197,6 +202,7 @@ export function Dashboard({
           </div>
         )}
 
+        {onGen && genLine && <GenTeaser line={genLine} onClick={onGen} />}
         {onInsights && entries.length > 0 && <InsightsTeaser entries={entries} onClick={onInsights} />}
 
         <div className="mt-8 flex items-baseline justify-between">
@@ -268,6 +274,26 @@ export function Dashboard({
         </div>
       </div>
     </>
+  );
+}
+
+/** What the gen costs to run, opening the gen view. */
+function GenTeaser({ line, onClick }: { line: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-[22px] flex min-h-16 w-full items-center gap-4 rounded-[14px] bg-card px-4 py-3 text-left hover:bg-track-2"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-fuel-soft" aria-hidden="true">
+        <Marker type="fuel" size={12} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-[15px] font-semibold">Your gen</span>
+        <span className="truncate font-mono text-xs text-muted">{line}</span>
+      </span>
+      <span className="text-sm font-bold whitespace-nowrap text-fuel-ink">See →</span>
+    </button>
   );
 }
 

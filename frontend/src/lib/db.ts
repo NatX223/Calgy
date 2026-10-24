@@ -1,6 +1,7 @@
 // Local-first storage: everything lives in this browser's IndexedDB.
 import Dexie, { type Table } from "dexie";
 import type { Device } from "./appliances";
+import type { FuelPurchase, GeneratorProfile } from "./generator";
 import { normaliseSolar, type SolarSettings } from "./solar";
 import { DEFAULT_SETTINGS, type Entry, type Settings } from "./spend";
 
@@ -14,6 +15,9 @@ class CalgyDB extends Dexie {
   devices!: Table<StoredDevice, string>;
   homeSettings!: Table<Row<HomeSettings>, string>;
   solarSettings!: Table<Row<SolarSettings>, string>;
+  generators!: Table<GeneratorProfile, string>;
+  fuelPurchases!: Table<FuelPurchase, string>;
+  drafts!: Table<Row<unknown>, string>;
 
   constructor() {
     super("calgy");
@@ -24,6 +28,7 @@ class CalgyDB extends Dexie {
       homeSettings: "key",
     });
     this.version(2).stores({ solarSettings: "key" });
+    this.version(3).stores({ generators: "id", fuelPurchases: "id, purchasedAt", drafts: "key" });
   }
 }
 
@@ -93,4 +98,39 @@ export async function loadSolar(): Promise<SolarSettings> {
 
 export function saveSolar(settings: SolarSettings) {
   return enqueue(() => db().solarSettings.put({ key: "solar", value: settings }));
+}
+
+export async function loadGen(): Promise<{ generator: GeneratorProfile | null; purchases: FuelPurchase[] }> {
+  try {
+    const [gens, purchases] = await Promise.all([db().generators.toArray(), db().fuelPurchases.toArray()]);
+    return { generator: gens[0] ?? null, purchases };
+  } catch (err) {
+    console.error("Calgy: storage unavailable", err);
+    return { generator: null, purchases: [] };
+  }
+}
+
+export function saveGen(generator: GeneratorProfile | null, purchases: FuelPurchase[]) {
+  return enqueue(() =>
+    db().transaction("rw", db().generators, db().fuelPurchases, async () => {
+      await db().generators.clear();
+      if (generator) await db().generators.put(generator);
+      await db().fuelPurchases.clear();
+      await db().fuelPurchases.bulkPut(purchases);
+    }),
+  );
+}
+
+/** Half-finished onboarding answers, so leaving mid-flow resumes at the same step. */
+export async function loadDraft<T>(key: string): Promise<T | null> {
+  try {
+    return ((await db().drafts.get(key))?.value as T) ?? null;
+  } catch (err) {
+    console.error("Calgy: storage unavailable", err);
+    return null;
+  }
+}
+
+export function saveDraft<T>(key: string, value: T | null) {
+  return enqueue(() => (value == null ? db().drafts.delete(key) : db().drafts.put({ key, value })));
 }
