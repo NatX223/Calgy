@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import type { ReactNode, Ref } from "react";
-import { trio } from "@/lib/appliances";
-import { commas, fU, num } from "@/lib/format";
-import { money, PANEL_W, runWatts, tagOf, type BatteryType, type PartKey, type Scope } from "@/lib/solar";
+import { trio } from "@calgy/engine/appliances";
+import { commas, fU, num } from "@calgy/engine/format";
+import { money, PANEL_W, runWatts, tagOf, type BatteryType, type PartKey, type Scope } from "@calgy/engine/solar";
 import { Chip } from "../ui";
 import { QtyBadge } from "../appliances/MyHome";
 import type { SolarCtx } from "./SolarApp";

@@ -1,8 +1,8 @@
 "use client";
 
 // Simulator panels for the Hybrid and Generator-only tabs.
-import { dec, fU, naira, num, rN } from "@/lib/format";
-import { lastsDays, type ModeTotals, type SimMode } from "@/lib/sim-modes";
+import { dec, fU, naira, num, rN } from "@calgy/engine/format";
+import { lastsDays, type ModeTotals, type SimMode } from "@calgy/engine/sim-modes";
 import { Chip, Eyebrow, Marker, SplitBar, StepButton } from "../ui";
 
 export type FuelInfo = {

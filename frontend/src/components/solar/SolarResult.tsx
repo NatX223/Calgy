@@ -1,7 +1,7 @@
 "use client";
 
-import { commas, dec, digits, num, trimN } from "@/lib/format";
-import { money } from "@/lib/solar";
+import { commas, dec, digits, num, trimN } from "@calgy/engine/format";
+import { money } from "@calgy/engine/solar";
 import type { SolarCtx } from "./SolarApp";
 import { BatterySwitch, cardClass, ScopeSwitch, Section } from "./SolarInputs";
 

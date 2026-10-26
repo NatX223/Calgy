@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { commas, digits, nice, short } from "@/lib/format";
+import { commas, digits, nice, short } from "@calgy/engine/format";
 
 function Field({
   label,

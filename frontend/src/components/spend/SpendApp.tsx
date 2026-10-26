@@ -1,30 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { derivedTariff } from "@/lib/appliances";
-import { BEFORE_TOKEN_OFFSET_MS, STALE_READING_DAYS } from "@/lib/calibration-constants";
-import {
-  loadDraft, loadGen, loadHome, loadMeter, loadSolar, loadSpend, saveDraft, saveGen, saveMeter, saveSolar, saveSpend,
-} from "@/lib/db";
-import type { Device } from "@/lib/energy";
+import { derivedTariff } from "@calgy/engine/appliances";
+import { BEFORE_TOKEN_OFFSET_MS, STALE_READING_DAYS } from "@calgy/engine/calibration-constants";
+import { loadDraft, loadGen, loadHome, loadMeter, loadSpend, saveDraft, saveGen, saveMeter, saveSpend } from "@/lib/data/store";
+import { isPushSubscribed } from "@/lib/push/push";
+import type { Device } from "@calgy/engine/energy";
 import {
   commas, digits, fromLocalInput, fU, iso, naira, nowLocalInput, num, shortDate, todayIso, toLocalInput, trim, uid,
-} from "@/lib/format";
+} from "@calgy/engine/format";
 import {
-  cleanImportedGen, GEN_ID, genSummary, naira10, OB_FUEL_ID, resolveKw,
-  type FuelPurchase, type GeneratorProfile,
-} from "@/lib/generator";
-import { calibrateHome, inferredHoursPatch } from "@/lib/home-calibration";
+  GEN_ID, genSummary, naira10, OB_FUEL_ID, resolveKw, type FuelPurchase, type GeneratorProfile,
+} from "@calgy/engine/generator";
+import { calibrateHome, inferredHoursPatch } from "@calgy/engine/home-calibration";
 import {
-  cleanImportedReadings, computeActualDaily, DEFAULT_METER_STATE, latestReading, localNoon, meterSnapshot,
-  normaliseMeterState, readingPairs, reminderDue, sortReadings, tokensFromEntries,
-  type MeterReading, type MeterState,
-} from "@/lib/meter";
-import { normaliseSolar } from "@/lib/solar";
+  computeActualDaily, DEFAULT_METER_STATE, latestReading, localNoon, meterSnapshot, readingPairs, reminderDue,
+  sortReadings, tokensFromEntries, type MeterReading, type MeterState,
+} from "@calgy/engine/meter";
 import {
-  byNewest, cleanImported, DEFAULT_SETTINGS, makeSample, OB_TOPUP_ID, unitPrice,
-  type Entry, type EntryType, type Settings,
-} from "@/lib/spend";
+  byNewest, DEFAULT_SETTINGS, makeSample, OB_TOPUP_ID, unitPrice, type Entry, type EntryType, type Settings,
+} from "@calgy/engine/spend";
+import { LinkNudge } from "../account/LinkNudge";
+import { SyncStatus } from "../sync/SyncStatus";
 import { GenInsightCard } from "../Calibration";
 import { Logo, Toast, useEscape, useToast } from "../ui";
 import { Dashboard } from "./Dashboard";
@@ -49,6 +46,8 @@ type Data = {
   devices: Device[];
   readings: MeterReading[];
   meter: MeterState;
+  /** Opened from a settings sub-page's back link (/app#settings). */
+  openSettings?: boolean;
 };
 
 const DRAFT_KEY = "onboarding";
@@ -74,7 +73,7 @@ export function SpendApp({ demo = false }: { demo?: boolean }) {
             ...spend, ...gen, draft, tariffOverride: home.tariffOverride, devices: home.devices, ...meter,
           }),
         );
-    load.then((d) => live && setData(d));
+    load.then((d) => live && setData({ ...d, openSettings: !demo && window.location.hash === "#settings" }));
     return () => {
       live = false;
     };
@@ -162,7 +161,9 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
   const [readings, setReadings] = useState(initial.readings);
   const [meter, setMeter] = useState(initial.meter);
   const { devices } = initial;
-  const [view, setView] = useState<View>(resume?.view ?? (initial.settings.onboarded ? "home" : "onboard"));
+  const [view, setView] = useState<View>(
+    resume?.view ?? (initial.settings.onboarded ? (initial.openSettings ? "settings" : "home") : "onboard"),
+  );
   const [offset, setOffset] = useState(0);
   const [ob, setOb] = useState<ObState>(() => {
     const base = obFrom(initial.settings, initial.entries, initial.meter);
@@ -179,7 +180,10 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
   const amountRef = useRef<HTMLInputElement>(null);
   const beforeRef = useRef<HTMLInputElement>(null);
   const unitsRef = useRef<HTMLInputElement>(null);
-  const { toast, shown: toastShown, show: showToast } = useToast(2800);
+  const { toast, shown: toastShown, show: showToastNow } = useToast(2800);
+  /** Logging copy gets "(will sync when online)" while offline. */
+  const showToast = (msg: string, actionLabel?: string, action?: () => void) =>
+    showToastNow(!demo && !navigator.onLine ? `${msg} (will sync when online)` : msg, actionLabel, action);
 
   useEffect(() => {
     if (!demo) saveSpend(entries, settings);
@@ -205,13 +209,17 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
     if (demo || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     if (!window.matchMedia?.("(display-mode: standalone)").matches) return;
     if (!reminderDue(initial.meter, latestReading(initial.readings), new Date(), STALE_READING_DAYS).notify) return;
-    try {
-      if (localStorage.getItem("calgy-meter-reminded") === todayIso()) return;
-      localStorage.setItem("calgy-meter-reminded", todayIso());
-    } catch {
-      return;
-    }
-    new Notification("Check your meter", { body: "One number keeps your Calgy estimates accurate." });
+    // Push reminders (from the server) replace this one.
+    isPushSubscribed().then((pushOn) => {
+      if (pushOn) return;
+      try {
+        if (localStorage.getItem("calgy-meter-reminded") === todayIso()) return;
+        localStorage.setItem("calgy-meter-reminded", todayIso());
+      } catch {
+        return;
+      }
+      new Notification("Check your meter", { body: "One number keeps your Calgy estimates accurate." });
+    });
   }, [demo, initial]);
 
   const grid = usesGrid(settings.source);
@@ -412,52 +420,6 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
     setSettings((s) => ({ ...s, gridHours: Math.min(24, Math.max(0, h)), gridHoursSource: "user", gridHoursRange: null }));
     setMeter((m) => ({ ...m, suggestionKeptAt: null }));
     showToast(`Light hours set · ${h}h a day`);
-  };
-
-  // ——— Backup ———
-
-  const exportJson = async () => {
-    const S = { ...settings, lastExport: new Date().toISOString() };
-    const solarSettings = demo ? undefined : await loadSolar();
-    const payload = {
-      app: "calgy", version: 1, exported_at: S.lastExport, entries, settings: S, solarSettings,
-      generator, fuelPurchases: purchases, meterReadings: readings, meterState: meter,
-    };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `calgy-backup-${todayIso()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-    setSettings(S);
-    showToast(`Backup downloaded · ${entries.length} entries`);
-  };
-
-  const importFile = (f: File) => {
-    const r = new FileReader();
-    r.onload = () => {
-      try {
-        const d = JSON.parse(String(r.result));
-        if (!d || !Array.isArray(d.entries)) throw new Error("bad");
-        const clean = cleanImported(d.entries);
-        const fuelIds = new Set(clean.filter((e) => e.type === "fuel").map((e) => e.id));
-        const gen = cleanImportedGen(d.generator, d.fuelPurchases, fuelIds);
-        setEntries(clean);
-        setGenerator(gen.generator);
-        setPurchases(gen.purchases);
-        setReadings(cleanImportedReadings(d.meterReadings));
-        setMeter(normaliseMeterState(d.meterState));
-        setOffset(0);
-        setSettings((s) => ({ ...DEFAULT_SETTINGS, ...(d.settings || {}), onboarded: true, lastExport: s.lastExport }));
-        if (!demo && d.solarSettings && typeof d.solarSettings === "object") saveSolar(normaliseSolar(d.solarSettings));
-        showToast(`Imported ${clean.length} entries`);
-      } catch {
-        showToast("That file isn't a Calgy backup");
-      }
-    };
-    r.readAsText(f);
   };
 
   const loadSample = (toHome: boolean) => {
@@ -758,9 +720,11 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
               setView("genView");
               window.scrollTo(0, 0);
             }}
+            statusSlot={demo ? null : <SyncStatus className="mt-1" />}
             meterSlot={
               grid && !demo ? (
                 <>
+                  <LinkNudge entries={entries.length + readings.length} />
                   {due.banner && !reminderHidden && (
                     <ReminderBanner onLog={() => openReading()} onDismiss={() => setReminderHidden(true)} />
                   )}
@@ -773,7 +737,9 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
                     onLog={() => openReading()}
                   />
                 </>
-              ) : null
+              ) : demo ? null : (
+                <LinkNudge entries={entries.length + readings.length} />
+              )
             }
             onLoadSample={() => {
               loadSample(false);
@@ -847,8 +813,7 @@ function SpendView({ initial, demo }: { initial: Data; demo: boolean }) {
             }
             onHoursAuto={() => setSettings((s) => ({ ...s, gridHoursSource: "none", gridHoursRange: null }))}
             onCalibrate={(on) => setSettings((s) => ({ ...s, calibrate: on }))}
-            onExport={exportJson}
-            onImport={importFile}
+            demo={demo}
             onSample={() => {
               loadSample(true);
               showToast("Sample data loaded");

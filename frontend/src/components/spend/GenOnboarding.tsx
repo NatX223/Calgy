@@ -1,12 +1,12 @@
 "use client";
 
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { commas, dec, digits, MONTHS, naira, num, parseIso, todayIso } from "@/lib/format";
+import { commas, dec, digits, MONTHS, naira, num, parseIso, todayIso } from "@calgy/engine/format";
 import {
   burnWarning, dateError, fmt1, GEN_TYPES, genType, HOUR_CHIPS, hoursError, naira10, naira100, NOT_SURE_TYPE,
   priceWarning, ratingError, sizeLabel, typeForProfile,
   type FuelType, type GeneratorProfile, type GenSizeSource, type GenSummary, type RatingUnit,
-} from "@/lib/generator";
+} from "@calgy/engine/generator";
 import { Chip, Eyebrow, Logo, Segmented } from "../ui";
 import { Field } from "./Onboarding";
 

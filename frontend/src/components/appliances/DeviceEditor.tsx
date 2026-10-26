@@ -4,11 +4,11 @@ import { useState, type ReactNode } from "react";
 import {
   CAT_LABEL, canSaveDraft, chargesDown, chargesUp, draftToDevice, drawUnit, fieldErrors, fmtDraw, presetOfDraft,
   visibleFields, type Device, type Draft, type Tariff, type TierKey,
-} from "@/lib/appliances";
-import { calibrationNotes, sourcesOf, type Side } from "@/lib/calibration";
-import { explain, LIMITS, resolveDraw, unusualLabel } from "@/lib/energy";
-import { dec, fU, num, trimN } from "@/lib/format";
-import { homeSplits, priceHome, splitsOf, supplyNote, toTrio, unitsOf, type Calib, type SimFuel } from "@/lib/home-calibration";
+} from "@calgy/engine/appliances";
+import { calibrationNotes, sourcesOf, type Side } from "@calgy/engine/calibration";
+import { explain, LIMITS, resolveDraw, unusualLabel } from "@calgy/engine/energy";
+import { dec, fU, num, trimN } from "@calgy/engine/format";
+import { homeSplits, priceHome, splitsOf, supplyNote, toTrio, unitsOf, type Calib, type SimFuel } from "@calgy/engine/home-calibration";
 import { Chip, StepButton } from "../ui";
 import { CustomSetup, field, LabelFields, Seg, segClass } from "./LabelFields";
 import { moneyFor } from "./MyHome";

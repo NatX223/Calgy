@@ -1,8 +1,8 @@
 "use client";
 
 import type { RefObject } from "react";
-import { dec, fromLocalInput, nowLocalInput } from "@/lib/format";
-import { futureError, unitsError } from "@/lib/meter";
+import { dec, fromLocalInput, nowLocalInput } from "@calgy/engine/format";
+import { futureError, unitsError } from "@calgy/engine/meter";
 import { Note } from "./GenOnboarding";
 
 export type ReadingSheetState = {

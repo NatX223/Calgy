@@ -1,9 +1,9 @@
 "use client";
 
 import type { RefObject } from "react";
-import { commas, dec, digits, fromLocalInput, naira, nowLocalInput, num, todayIso, trim } from "@/lib/format";
-import { futureError, unitsError } from "@/lib/meter";
-import { byNewest, type Entry, type EntryType } from "@/lib/spend";
+import { commas, dec, digits, fromLocalInput, naira, nowLocalInput, num, todayIso, trim } from "@calgy/engine/format";
+import { futureError, unitsError } from "@calgy/engine/meter";
+import { byNewest, type Entry, type EntryType } from "@calgy/engine/spend";
 import { Chip, Eyebrow } from "../ui";
 import { Note } from "./GenOnboarding";
 

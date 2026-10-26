@@ -17,7 +17,9 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Calgy — your fuel and token money, added up",
   description:
-    "Track what your home spends on generator fuel and prepaid meter tokens. No signup, data stays on your device.",
+    "Track what your home spends on generator fuel and prepaid meter tokens. No signup needed, works offline.",
+  icons: { apple: "/icons/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "Calgy", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

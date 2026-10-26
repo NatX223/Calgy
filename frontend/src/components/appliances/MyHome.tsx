@@ -1,13 +1,13 @@
 "use client";
 
-import { fromLabel, usageSummary, type Device, type Tariff } from "@/lib/appliances";
-import { sumSplits } from "@/lib/calibration";
-import { fU, naira, rN } from "@/lib/format";
-import { homeSplits, priceHome, supplyNote, toTrio, unitsOf, type Calib, type SimFuel } from "@/lib/home-calibration";
-import type { Confidence } from "@/lib/meter";
-import type { Settings } from "@/lib/spend";
+import { fromLabel, usageSummary, type Device, type Tariff } from "@calgy/engine/appliances";
+import { sumSplits } from "@calgy/engine/calibration";
+import { fU, naira, rN } from "@calgy/engine/format";
+import { homeSplits, priceHome, supplyNote, toTrio, unitsOf, type Calib, type SimFuel } from "@calgy/engine/home-calibration";
+import type { Confidence } from "@calgy/engine/meter";
+import type { Settings } from "@calgy/engine/spend";
 import Link from "next/link";
-import { CATEGORIES } from "@/lib/presets";
+import { CATEGORIES } from "@calgy/engine/presets";
 import { CalBadges, fH, GenInsightCard, HybridSummary, LightHoursCard, RealityCard } from "../Calibration";
 import { Eyebrow } from "../ui";
 

@@ -1,0 +1,29 @@
+# cd deploy && docker compose up -d --build
+# Secrets stay on the VM in /etc/calgy/api.env (root-owned, chmod 600); the service account is CRED in it.
+services:
+  api:
+    build:
+      context: .. # repo root, so packages/ is in the build
+      dockerfile: backend/Dockerfile
+    env_file: /etc/calgy/api.env
+    network_mode: host # the API binds 127.0.0.1:8080 on the host; only Caddy is public
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  caddy:
+    image: caddy:2
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates: must persist
+      - caddy_config:/config
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+volumes:
+  caddy_data:
+  caddy_config:

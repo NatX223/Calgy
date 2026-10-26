@@ -1,13 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
-import type { CalibrationResult } from "@/lib/calibration";
-import { DOW, fU, MONTHS, naira, parseIso, shortDate, trim } from "@/lib/format";
+import type { CalibrationResult } from "@calgy/engine/calibration";
+import { DOW, fU, MONTHS, naira, parseIso, shortDate, trim } from "@calgy/engine/format";
 import {
   meterSnapshot, sortReadings, tokensFromEntries, type ActualDaily, type MeterReading, type MeterState, type ReadingPair,
   type ReminderDay,
-} from "@/lib/meter";
-import type { Entry } from "@/lib/spend";
+} from "@calgy/engine/meter";
+import type { Entry } from "@calgy/engine/spend";
 import { gridBadge, LightHoursCard } from "../Calibration";
 import { Eyebrow, Marker } from "../ui";
 
@@ -336,15 +337,12 @@ function Reminders({ meter, onReminder }: { meter: MeterState; onReminder: (p: P
               ? "We'll send a notification when you open Calgy after that time."
               : "We'll show a reminder in Calgy when your last reading is a week old."}
           </span>
-          {canNotify && Notification.permission === "default" && (
-            <button
-              type="button"
-              onClick={() => Notification.requestPermission().then(() => onReminder({}))}
-              className="h-11 self-start rounded-xl border-[1.5px] border-line-strong px-4 text-sm font-semibold"
-            >
-              Allow notifications
-            </button>
-          )}
+          <Link
+            href="/app/settings/reminders"
+            className="inline-flex h-11 items-center self-start rounded-xl border-[1.5px] border-line-strong px-4 text-sm font-semibold text-ink no-underline"
+          >
+            Get it as a notification
+          </Link>
         </>
       )}
     </Card>

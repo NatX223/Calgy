@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { lagosFlat, type Device } from "@/lib/appliances";
-import { loadHome, loadSolar, loadSpend, saveSolar } from "@/lib/db";
-import { commas, digits, num } from "@/lib/format";
+import { lagosFlat, type Device } from "@calgy/engine/appliances";
+import { loadHome, loadSolar, loadSpend, saveSolar } from "@/lib/data/store";
+import { commas, digits, num } from "@calgy/engine/format";
 import {
   breakEvenCopy, computeSolar, normaliseSolar, readSpendSource, sampleHousehold, SAMPLE_SOURCE, systemCopy,
   type BatteryType, type CostMode, type PartKey, type Scope, type SolarSettings, type SpendSource, type Tag,
-} from "@/lib/solar";
+} from "@calgy/engine/solar";
 import { Logo } from "../ui";
 import { CostSection, LoadSection, NowSection, SystemSection } from "./SolarInputs";
 import { ResultSection, WhatIfSection } from "./SolarResult";

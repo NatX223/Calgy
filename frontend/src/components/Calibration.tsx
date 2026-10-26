@@ -4,11 +4,11 @@
 import { useState, type ReactNode } from "react";
 import {
   genPrompt, genReady, GRID_CULPRITS, gridPrompt, gridReady, type CalibrationResult, type GenResult, type GridResult,
-} from "@/lib/calibration";
-import { COVERAGE_OK, GEN_OVERSIZED_LOAD, SHARED_METER_COVERAGE } from "@/lib/calibration-constants";
-import { fU, naira, trim } from "@/lib/format";
-import { KW_PER_KVA } from "@/lib/generator";
-import { confidenceAbove, type Confidence } from "@/lib/meter";
+} from "@calgy/engine/calibration";
+import { COVERAGE_OK, GEN_OVERSIZED_LOAD, SHARED_METER_COVERAGE } from "@calgy/engine/calibration-constants";
+import { fU, naira, trim } from "@calgy/engine/format";
+import { KW_PER_KVA } from "@calgy/engine/generator";
+import { confidenceAbove, type Confidence } from "@calgy/engine/meter";
 import { Eyebrow } from "./ui";
 
 const CONF: Record<Confidence, string> = { rough: "Rough", good: "Good", solid: "Solid" };

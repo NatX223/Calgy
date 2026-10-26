@@ -1,9 +1,9 @@
 "use client";
 
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { commas, dec, digits, nice, num, short } from "@/lib/format";
-import { computeActualDaily, daysLeftRange } from "@/lib/meter";
-import type { PowerSource } from "@/lib/spend";
+import { commas, dec, digits, nice, num, short } from "@calgy/engine/format";
+import { computeActualDaily, daysLeftRange } from "@calgy/engine/meter";
+import type { PowerSource } from "@calgy/engine/spend";
 import { Eyebrow, Logo, Marker, Segmented, SplitBar } from "../ui";
 
 export type ObState = {

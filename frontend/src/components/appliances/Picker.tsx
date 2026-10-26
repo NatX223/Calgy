@@ -1,7 +1,7 @@
 "use client";
 
-import { CAT_LABEL, presetFigure } from "@/lib/appliances";
-import { CATEGORIES, PRESETS, type Preset } from "@/lib/presets";
+import { CAT_LABEL, presetFigure } from "@calgy/engine/appliances";
+import { CATEGORIES, PRESETS, type Preset } from "@calgy/engine/presets";
 import { Chip } from "../ui";
 
 export function CloseButton({ onClick }: { onClick: () => void }) {

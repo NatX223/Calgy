@@ -1,0 +1,10 @@
+{
+  "name": "@calgy/firebase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Firestore security rules (prod + dev) and their tests. Tests need the Firestore emulator (Java 21+).",
+  "scripts": {
+    "test:rules": "npx -y firebase-tools@latest emulators:exec --only firestore --project demo-calgy \"vitest run\""
+  }
+}

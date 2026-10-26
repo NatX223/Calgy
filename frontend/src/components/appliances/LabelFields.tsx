@@ -3,10 +3,10 @@
 import {
   adapterMaxW, CAT_ICON, draftRating, fieldErrors, fmtDraw, placeholder, presetOfDraft,
   type Draft, type FieldKey, type LabelMethod, type UsageProfile,
-} from "@/lib/appliances";
-import { ADAPTER_TYPICAL_FACTOR } from "@/lib/energy-constants";
-import { dec } from "@/lib/format";
-import { CATEGORIES } from "@/lib/presets";
+} from "@calgy/engine/appliances";
+import { ADAPTER_TYPICAL_FACTOR } from "@calgy/engine/energy-constants";
+import { dec } from "@calgy/engine/format";
+import { CATEGORIES } from "@calgy/engine/presets";
 import type { ReactNode } from "react";
 import { Chip } from "../ui";
 

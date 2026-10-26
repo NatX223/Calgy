@@ -1,0 +1,19 @@
+{
+  "name": "calgy",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "packages/*",
+    "firebase"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w frontend",
+    "build": "npm run build -w frontend",
+    "test": "npm test -w @calgy/engine -w @calgy/shared -w frontend -w backend",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:rules": "npm run test:rules -w @calgy/firebase",
+    "test:e2e": "npx -y firebase-tools@latest emulators:exec --config firebase.dev.json --only auth,firestore --project demo-calgy \"npm run test:e2e -w frontend\"",
+    "emulators": "npx -y firebase-tools@latest emulators:start --config firebase.dev.json --project demo-calgy"
+  }
+}

@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
-import { nice, short } from "@/lib/format";
-import type { Settings } from "@/lib/spend";
+import Link from "next/link";
+import { useState, type ReactNode } from "react";
+import { nice, short } from "@calgy/engine/format";
+import type { Settings } from "@calgy/engine/spend";
 import { Eyebrow, StepButton } from "../ui";
 
 function Card({ children, className = "flex-col gap-2.5" }: { children: ReactNode; className?: string }) {
@@ -19,10 +20,9 @@ export function SettingsView({
   onHours,
   onHoursAuto,
   onCalibrate,
-  onExport,
-  onImport,
   onSample,
   onErase,
+  demo = false,
 }: {
   entryCount: number;
   settings: Settings;
@@ -34,17 +34,15 @@ export function SettingsView({
   onHours: (delta: number) => void;
   onHoursAuto: () => void;
   onCalibrate: (on: boolean) => void;
-  onExport: () => void;
-  onImport: (f: File) => void;
   onSample: () => void;
   onErase: () => void;
+  /** Landing-page demo: no account. */
+  demo?: boolean;
 }) {
   const [confirmErase, setConfirmErase] = useState(false);
   const [confirmSample, setConfirmSample] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const guess = ((S.fuelWeekly || 0) * 52) / 12 + (S.tokenMonthly || 0);
-  const daysSince = S.lastExport ? Math.floor((new Date().getTime() - new Date(S.lastExport).getTime()) / 864e5) : null;
 
   return (
     <div className="flex flex-col gap-3.5 pb-10">
@@ -124,42 +122,31 @@ export function SettingsView({
         </label>
       </Card>
 
-      <Card className="flex-col gap-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <Eyebrow>Backup</Eyebrow>
-          <span className="font-mono text-xs text-muted">
-            {daysSince === null ? "No backup yet" : daysSince === 0 ? "Backed up today" : `Last: ${daysSince}d ago`}
-          </span>
-        </div>
-        <span className="text-[15px] leading-[1.45] text-pretty">
-          Your logs live only in this browser. Clearing it, or switching phones, wipes them — download a copy now and
-          then.
-        </span>
-        <div className="grid grid-cols-2 gap-2.5">
-          <button type="button" onClick={onExport} className="h-[52px] rounded-[14px] bg-ink text-[15px] font-bold text-card">
-            Export JSON
-          </button>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="h-[52px] rounded-[14px] border-[1.5px] border-line-strong text-[15px] font-bold"
-          >
-            Import JSON
-          </button>
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            e.target.value = "";
-            if (f) onImport(f);
-          }}
-        />
-        <span className="text-[13px] text-muted">Importing replaces what&apos;s on this device.</span>
-      </Card>
+      {!demo && (
+        <Card className="flex-col gap-0 p-0">
+          {[
+            { href: "/app/settings/account", label: "Account", hint: "Save your data across devices" },
+            { href: "/app/settings/reminders", label: "Reminders", hint: "Weekly meter check" },
+            { href: "/app/settings/privacy", label: "Data & privacy", hint: "Export, import, delete, sharing" },
+          ].map((l, i) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className={`flex min-h-16 items-center justify-between gap-3 px-[18px] py-3 text-ink no-underline ${
+                i ? "border-t border-line" : ""
+              }`}
+            >
+              <span className="flex flex-col gap-0.5">
+                <span className="text-base font-semibold">{l.label}</span>
+                <span className="text-sm text-muted">{l.hint}</span>
+              </span>
+              <span aria-hidden="true" className="text-xl text-muted">
+                ›
+              </span>
+            </Link>
+          ))}
+        </Card>
+      )}
 
       <Card>
         <Eyebrow>Data · {entryCount} entries</Eyebrow>
@@ -195,7 +182,9 @@ export function SettingsView({
           {confirmErase ? `Tap again to erase ${entryCount} entries` : "Erase everything"}
         </button>
       </Card>
-      <span className="mt-2 text-center font-mono text-xs text-muted">Calgy MVP · stored on this device only</span>
+      <span className="mt-2 text-center font-mono text-xs text-muted">
+        {demo ? "Calgy demo · sample data only" : "Calgy · saved on this device and synced to your account"}
+      </span>
     </div>
   );
 }

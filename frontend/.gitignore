@@ -42,3 +42,5 @@ next-env.d.ts
 
 # design and hand-off files
 design_handoff_calgy_mvp
+
+!.env.example

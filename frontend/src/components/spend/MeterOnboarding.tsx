@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type Dispatch, type SetStateAction } from "react";
-import { dec, digits, num, todayIso, trim } from "@/lib/format";
-import { unitsError } from "@/lib/meter";
+import { dec, digits, num, todayIso, trim } from "@calgy/engine/format";
+import { unitsError } from "@calgy/engine/meter";
 import { Eyebrow } from "../ui";
 import { Note, Option } from "./GenOnboarding";
 import { Field, obTariff, usesGen, type ObState } from "./Onboarding";

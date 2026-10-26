@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// DEV ONLY (emulator or a separate dev project): the dev API shim writes users/{uid} from the client.
+// Never deploy these to production.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /{coll}/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+  }
+}

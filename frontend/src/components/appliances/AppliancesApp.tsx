@@ -6,15 +6,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   derivedTariff, draftFrom, draftToDevice, initSim, isModified, lagosFlat, newCustomDraft, newDraft, toDevice,
   type Device, type Draft, type SimRow, type Tariff,
-} from "@/lib/appliances";
-import { sumSplits } from "@/lib/calibration";
-import { loadGen, loadHome, loadMeter, loadSpend, patchSettings, saveHome, saveMeter } from "@/lib/db";
-import { fU } from "@/lib/format";
-import type { FuelPurchase, GeneratorProfile } from "@/lib/generator";
-import { calibContext, calibrateHome, homeSplits, inferredHoursPatch, simFuel, splitsOf, unitsOf } from "@/lib/home-calibration";
-import type { MeterReading, MeterState } from "@/lib/meter";
-import type { Preset } from "@/lib/presets";
-import type { Entry, Settings } from "@/lib/spend";
+} from "@calgy/engine/appliances";
+import { sumSplits } from "@calgy/engine/calibration";
+import { loadGen, loadHome, loadMeter, loadSpend, patchSettings, saveHome, saveMeter } from "@/lib/data/store";
+import { fU } from "@calgy/engine/format";
+import type { FuelPurchase, GeneratorProfile } from "@calgy/engine/generator";
+import { calibContext, calibrateHome, homeSplits, inferredHoursPatch, simFuel, splitsOf, unitsOf } from "@calgy/engine/home-calibration";
+import type { MeterReading, MeterState } from "@calgy/engine/meter";
+import type { Preset } from "@calgy/engine/presets";
+import type { Entry, Settings } from "@calgy/engine/spend";
 import { Logo, Toast, useEscape, useToast } from "../ui";
 import { DeviceEditor } from "./DeviceEditor";
 import { MyHome } from "./MyHome";

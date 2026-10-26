@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { daysIn, DOW, fmtQ, MONTHS, naira, nice, parseIso, short, trim, ymKey } from "@/lib/format";
-import { monthBuckets } from "@/lib/insights";
-import { byNewest, type Entry, type EntryType, type Settings } from "@/lib/spend";
+import { daysIn, DOW, fmtQ, MONTHS, naira, nice, parseIso, short, trim, ymKey } from "@calgy/engine/format";
+import { monthBuckets } from "@calgy/engine/insights";
+import { byNewest, type Entry, type EntryType, type Settings } from "@calgy/engine/spend";
 import { Eyebrow, Logo, Marker, SplitBar } from "../ui";
 
 type Props = {
@@ -19,8 +19,10 @@ type Props = {
   /** One-line gen summary; shows the gen card when set. */
   genLine?: string;
   onGen?: () => void;
-  /** Meter card and reminder (prepaid homes). */
+  /** Meter card and reminder (prepaid homes), account nudge. */
   meterSlot?: ReactNode;
+  /** Sync status, under the header. */
+  statusSlot?: ReactNode;
   onLoadSample: () => void;
   /** Compare current month to the same days of last month, or to all of it. */
   compareBasis?: "same-period" | "full-month";
@@ -48,6 +50,7 @@ export function Dashboard({
   genLine,
   onGen,
   meterSlot,
+  statusSlot,
   onLoadSample,
   compareBasis = "same-period",
   showPace = true,
@@ -108,8 +111,6 @@ export function Dashboard({
     return diff === 0 ? "Today" : diff === 1 ? "Yesterday" : `${DOW[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
   };
 
-  const daysSince = S.lastExport ? Math.floor((now.getTime() - new Date(S.lastExport).getTime()) / 864e5) : null;
-  const showBackupNudge = entries.length >= 5 && (daysSince === null || daysSince >= 14);
 
   return (
     <>
@@ -146,6 +147,7 @@ export function Dashboard({
             </button>
           </div>
         </header>
+        {statusSlot}
 
         <div className="mt-2 flex items-center justify-between">
           <button
@@ -250,20 +252,6 @@ export function Dashboard({
           </div>
         )}
 
-        {showBackupNudge && (
-          <button
-            type="button"
-            onClick={onSettings}
-            className="mt-6 flex min-h-14 w-full items-center justify-between gap-3 rounded-[14px] bg-track-2 px-4 py-3 text-left"
-          >
-            <span className="text-sm leading-[1.4]">
-              {daysSince === null
-                ? "Your logs live only in this browser. No backup yet."
-                : `Last backup ${daysSince} days ago.`}
-            </span>
-            <span className="text-sm font-bold whitespace-nowrap text-light">Back up →</span>
-          </button>
-        )}
       </div>
 
       <div className="bar-fade pb-safe-bar fixed inset-x-0 bottom-0 z-20 px-5 pt-[22px]">

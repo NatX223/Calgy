@@ -1,0 +1,14 @@
+# Replace 203-0-113-5 with the VM's static IP, dashes for dots (203.0.113.5 → 203-0-113-5.sslip.io).
+# Caddy gets and renews the certificate itself and redirects http → https.
+# If issuance keeps failing (CA rate limits on the shared domain), try the nip.io equivalent.
+203-0-113-5.sslip.io {
+	encode gzip
+	reverse_proxy 127.0.0.1:8080
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+	}
+	log {
+		output stdout
+	}
+}

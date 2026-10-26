@@ -3,13 +3,13 @@
 import {
   CAT_LABEL, CAT_ORDER, chargesDown, chargesUp, isModified, toDevice, usageSummary,
   type Device, type SimRow, type Tariff,
-} from "@/lib/appliances";
-import { genReady, predictedLph, sumSplits, type GenSpec, type Household } from "@/lib/calibration";
-import { ASSUMED_HYBRID_GEN_HOURS, DEFAULT_GRID_HOURS } from "@/lib/calibration-constants";
-import { LIMITS } from "@/lib/energy";
-import { commas, dec, digits, fU, naira, num, rN, shortN, trimN } from "@/lib/format";
-import { splitsOf, supplyNote, toTrio, type Calib } from "@/lib/home-calibration";
-import { costMode, type SimMode } from "@/lib/sim-modes";
+} from "@calgy/engine/appliances";
+import { genReady, predictedLph, sumSplits, type GenSpec, type Household } from "@calgy/engine/calibration";
+import { ASSUMED_HYBRID_GEN_HOURS, DEFAULT_GRID_HOURS } from "@calgy/engine/calibration-constants";
+import { LIMITS } from "@calgy/engine/energy";
+import { commas, dec, digits, fU, naira, num, rN, shortN, trimN } from "@calgy/engine/format";
+import { splitsOf, supplyNote, toTrio, type Calib } from "@calgy/engine/home-calibration";
+import { costMode, type SimMode } from "@calgy/engine/sim-modes";
 import { Chip, Eyebrow, StepButton } from "../ui";
 import { TierPicker } from "./DeviceEditor";
 import { costFor, QtyBadge } from "./MyHome";

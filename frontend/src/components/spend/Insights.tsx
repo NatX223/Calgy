@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { fmtQ, naira, short, trim } from "@/lib/format";
-import { bucketsFor, niceCeil, type Bucket, type Period } from "@/lib/insights";
-import type { Entry, Settings } from "@/lib/spend";
+import { fmtQ, naira, short, trim } from "@calgy/engine/format";
+import { bucketsFor, niceCeil, type Bucket, type Period } from "@calgy/engine/insights";
+import type { Entry, Settings } from "@calgy/engine/spend";
 import { Eyebrow, Marker, Segmented, SplitBar } from "../ui";
 
 const PERIODS: { id: Period; label: string }[] = [

@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.next
+**/.env
+**/.env.*
+!**/.env.example
+**/*service-account*.json
+.git
+.firebase
+**/*.log
+frontend/e2e
+frontend/test-results
+frontend/playwright-report

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { Tariff } from "@/lib/appliances";
-import { commas, dec, digits, fU, num } from "@/lib/format";
+import type { Tariff } from "@calgy/engine/appliances";
+import { commas, dec, digits, fU, num } from "@calgy/engine/format";
 import { CloseButton } from "./Picker";
 
 export function TariffSheet({
